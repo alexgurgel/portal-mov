@@ -1,9 +1,9 @@
 'use client'
 
-// Removemos o 'force-dynamic' daqui pois ele não funciona bem dentro de 'use client'
-// A proteção do Suspense vai resolver o problema do build.
+// 1. Força o render dinâmico para evitar erro de pré-renderização no build
+export const dynamic = 'force-dynamic'
 
-import { Suspense, useEffect, useState } from "react" // <--- ADICIONADO SUSPENSE
+import { Suspense, useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
 import { NewTicket } from "@/components/NewTicket"
@@ -16,15 +16,17 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
-// 1. Renomeamos seu componente original para "DashboardContent"
+// --- Componente Interno com a Lógica ---
 function DashboardContent() {
   const [tickets, setTickets] = useState<any[]>([])
   const [statusFilter, setStatusFilter] = useState("todos")
   
+  // Hooks do Next.js
   const searchParams = useSearchParams()
   const setorFiltrado = searchParams.get('sector')
 
   useEffect(() => {
+    // Busca inicial
     const fetchTickets = async () => {
       let query = supabase
         .from('tickets')
@@ -56,6 +58,7 @@ function DashboardContent() {
 
   return (
     <div className="max-w-7xl mx-auto">
+      {/* Cabeçalho */}
       <div className="flex flex-col md:flex-row justify-between items-end mb-6 gap-4">
         <div>
             <h1 className="text-3xl font-bold text-gray-800">
@@ -67,6 +70,7 @@ function DashboardContent() {
         </div>
 
         <div className="flex gap-3 items-center flex-wrap md:flex-nowrap">
+            {/* Filtro de Status */}
             <div className="w-[160px]">
                 <Select onValueChange={setStatusFilter} defaultValue="todos">
                     <SelectTrigger className="bg-white">
@@ -81,11 +85,13 @@ function DashboardContent() {
                 </Select>
             </div>
             
+            {/* Botões de Ação */}
             <ExportTickets data={tickets} />
             <NewTicket />
         </div>
       </div>
 
+      {/* Tabela de Tickets */}
       <div className="bg-white rounded-lg shadow border overflow-hidden">
         <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
@@ -149,11 +155,23 @@ function DashboardContent() {
   )
 }
 
-// 2. Criamos um componente "Pai" que exporta o conteúdo protegido pelo Suspense
+// --- Componente Principal (Wrapper) ---
 export default function Dashboard() {
+  // 2. Estado para garantir que rodamos apenas no cliente
+  const [isMounted, setIsMounted] = useState(false)
+
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
+
+  // Se não estiver montado no navegador ainda, retorna null para não quebrar o build do servidor
+  if (!isMounted) {
+    return <div className="p-10 text-center">Carregando painel...</div>
+  }
+
+  // 3. Suspense para proteger a leitura de URL
   return (
-    // O fallback é o que aparece enquanto o Next.js tenta entender os parametros da URL
-    <Suspense fallback={<div className="p-10 text-center">Carregando painel...</div>}>
+    <Suspense fallback={<div className="p-10 text-center">Carregando dados...</div>}>
       <DashboardContent />
     </Suspense>
   )
