@@ -1,4 +1,5 @@
 'use client'
+export const dynamic = 'force-dynamic'
 import { NewTicket } from "@/components/NewTicket"
 import { ExportTickets } from "@/components/ExportTickets" // IMPORT NOVO AQUI
 import { useEffect, useState } from "react"
