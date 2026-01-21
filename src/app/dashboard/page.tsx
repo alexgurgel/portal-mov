@@ -1,11 +1,13 @@
 'use client'
-export const dynamic = 'force-dynamic'
-import { NewTicket } from "@/components/NewTicket"
-import { ExportTickets } from "@/components/ExportTickets" // IMPORT NOVO AQUI
-import { useEffect, useState } from "react"
-import Link from "next/link"
+
+// Removemos o 'force-dynamic' daqui pois ele não funciona bem dentro de 'use client'
+// A proteção do Suspense vai resolver o problema do build.
+
+import { Suspense, useEffect, useState } from "react" // <--- ADICIONADO SUSPENSE
 import { useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
+import { NewTicket } from "@/components/NewTicket"
+import { ExportTickets } from "@/components/ExportTickets"
 import {
   Select,
   SelectContent,
@@ -14,7 +16,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
-export default function Dashboard() {
+// 1. Renomeamos seu componente original para "DashboardContent"
+function DashboardContent() {
   const [tickets, setTickets] = useState<any[]>([])
   const [statusFilter, setStatusFilter] = useState("todos")
   
@@ -28,12 +31,10 @@ export default function Dashboard() {
         .select('*')
         .order('created_at', { ascending: false })
 
-      // 1. Filtra por Setor (se houver)
       if (setorFiltrado) {
         query = query.eq('category', setorFiltrado)
       }
 
-      // 2. Filtra por Status (se não for 'todos')
       if (statusFilter !== "todos") {
         query = query.eq('status', statusFilter)
       }
@@ -44,7 +45,6 @@ export default function Dashboard() {
     fetchTickets()
   }, [setorFiltrado, statusFilter]) 
 
-  // Função auxiliar para cores do status
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'resolvido': return 'bg-green-100 text-green-700'
@@ -56,7 +56,6 @@ export default function Dashboard() {
 
   return (
     <div className="max-w-7xl mx-auto">
-      {/* Cabeçalho */}
       <div className="flex flex-col md:flex-row justify-between items-end mb-6 gap-4">
         <div>
             <h1 className="text-3xl font-bold text-gray-800">
@@ -68,7 +67,6 @@ export default function Dashboard() {
         </div>
 
         <div className="flex gap-3 items-center flex-wrap md:flex-nowrap">
-            {/* Filtro de Status */}
             <div className="w-[160px]">
                 <Select onValueChange={setStatusFilter} defaultValue="todos">
                     <SelectTrigger className="bg-white">
@@ -83,15 +81,11 @@ export default function Dashboard() {
                 </Select>
             </div>
             
-            {/* BOTÃO DE EXCEL AQUI */}
             <ExportTickets data={tickets} />
-            
-            {/* Botão de Novo Pedido */}
             <NewTicket />
         </div>
       </div>
 
-      {/* Tabela de Tickets */}
       <div className="bg-white rounded-lg shadow border overflow-hidden">
         <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
@@ -152,5 +146,15 @@ export default function Dashboard() {
         </div>
       </div>
     </div>
+  )
+}
+
+// 2. Criamos um componente "Pai" que exporta o conteúdo protegido pelo Suspense
+export default function Dashboard() {
+  return (
+    // O fallback é o que aparece enquanto o Next.js tenta entender os parametros da URL
+    <Suspense fallback={<div className="p-10 text-center">Carregando painel...</div>}>
+      <DashboardContent />
+    </Suspense>
   )
 }
