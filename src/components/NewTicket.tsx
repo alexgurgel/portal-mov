@@ -1,5 +1,4 @@
 'use client'
-
 import { useState, useEffect } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
@@ -27,7 +26,7 @@ export function NewTicket() {
   const [loading, setLoading] = useState(false)
   
   const [category, setCategory] = useState("Geral")
-  const [requesterName, setRequesterName] = useState("") // NOVO: Nome do Solicitante
+  const [requesterName, setRequesterName] = useState("") // Novo: Estado para o solicitante
   const [title, setTitle] = useState("") 
   const [formData, setFormData] = useState<any>({})
   const [items, setItems] = useState([
@@ -39,13 +38,15 @@ export function NewTicket() {
     setFormData({})
     setItems([{ codigo: '', descricao: '', qtd: 1, pat: '', aplicacao: '' }])
     setTitle("")
+    setRequesterName("") // Limpa o nome ao trocar categoria ou abrir
     setArquivoParaUpload(null)
-  }, [category])
+  }, [category, open])
 
   const updateForm = (field: string, value: any) => {
     setFormData((prev: any) => ({ ...prev, [field]: value }))
   }
 
+  // Funções da Tabela
   const updateItem = (index: number, field: string, value: any) => {
     const newItems = [...items]; 
     // @ts-ignore
@@ -56,9 +57,15 @@ export function NewTicket() {
   const removeItem = (index: number) => setItems(items.filter((_, i) => i !== index))
 
   async function handleSubmit() {
-    // Validações Obrigatórias
-    if (!requesterName) return alert("Por favor, informe o Nome do Solicitante.")
-    if (!formData.prioridade) return alert("Por favor, selecione a Urgência.")
+    // Validação de Campos Obrigatórios
+    if (!requesterName) {
+        return alert("Por favor, informe o Nome do Solicitante.")
+    }
+    if (!formData.prioridade) {
+        return alert("Por favor, selecione a Urgência (Prioridade) da solicitação.")
+    }
+
+    // Validação Específica: Cadastro Fornecedor/Cliente exige CNPJ
     if ((category === 'Cadastro Fornecedor' || category === 'Cadastro Cliente') && !arquivoParaUpload) {
         return alert("O Cartão CNPJ é obrigatório para este cadastro.")
     }
@@ -66,11 +73,11 @@ export function NewTicket() {
     setLoading(true)
 
     try {
-      // Garantia de pegar o usuário atualizado para evitar o erro de foreign key
+      // Busca o usuário na hora do clique para garantir a sessão e evitar erro de user_id
       const { data: { user }, error: authError } = await supabase.auth.getUser()
-      if (authError || !user) throw new Error("Usuário não logado ou sessão expirada")
+      if (authError || !user) throw new Error("Usuário não logado ou sessão expirada.")
 
-      // Upload Arquivo para o bucket 'anexos'
+      // Upload Arquivo
       let urlArquivo = "", nomeArquivo = ""
       if (arquivoParaUpload) {
         nomeArquivo = arquivoParaUpload.name
@@ -81,7 +88,7 @@ export function NewTicket() {
         urlArquivo = dataUrl.publicUrl
       }
 
-      // Lógica de Títulos e Descrições Automáticas
+      // Títulos e Descrições Automáticas
       let finalTitle = title
       let description = formData.description || ""
 
@@ -119,7 +126,7 @@ export function NewTicket() {
         category: category,
         status: 'aberto',
         user_id: user.id,
-        requester_name: requesterName, // Campo que adicionamos no banco
+        requester_name: requesterName, // Adicionado conforme solicitado
         custom_data: customDataPayload,
       })
 
@@ -135,6 +142,7 @@ export function NewTicket() {
     }
   }
 
+  // --- COMPONENTE DE TABELA (Cotação/Compra) ---
   const renderItemsTable = () => (
     <div className="border rounded-md overflow-hidden bg-white shadow-sm mt-2">
        <div className="grid grid-cols-12 gap-2 bg-gray-100 p-2 text-xs font-bold text-gray-700 border-b">
@@ -163,14 +171,12 @@ export function NewTicket() {
     </div>
   )
 
+  // --- RENDERIZAÇÃO DOS CAMPOS ESPECÍFICOS ---
   const renderFields = () => {
     switch (category) {
       case "Nova Locação":
         return (
           <div className="grid gap-3 border p-4 rounded-md bg-gray-50">
-            <div className="bg-amber-100 p-2 text-xs text-amber-800 rounded mb-2 font-semibold">
-               ⚠️ Obrigatório: Cartão CNPJ, Dados Cadastrais, Proposta e docs relevantes.
-            </div>
              <div className="grid grid-cols-2 gap-2">
                 <div><Label>Cliente</Label><Input onChange={e => updateForm('cliente', e.target.value)} /></div>
                 <div><Label>CNPJ</Label><Input onChange={e => updateForm('cnpj', e.target.value)} /></div>
@@ -179,28 +185,47 @@ export function NewTicket() {
             <div><Label>Local de Entrega</Label><Input onChange={e => updateForm('local', e.target.value)} /></div>
           </div>
         )
+
       case "Compra":
       case "Cotação":
         return (
             <div className="grid gap-2">
-                <Label className="text-base font-bold text-gray-800">Lista de Itens ({category})</Label>
+                <Label className="text-base font-bold">Lista de Itens ({category})</Label>
                 {renderItemsTable()}
                 <div className="mt-2"><Label>Obs. Gerais</Label><Textarea onChange={e => updateForm('description', e.target.value)} /></div>
             </div>
         )
+
       case "Cadastro Fornecedor":
       case "Cadastro Cliente":
         return (
             <div className="grid gap-3 border p-4 rounded-md bg-blue-50">
                 <h3 className="font-bold text-sm text-blue-900">Dados Cadastrais</h3>
-                <div className="grid gap-2"><Label>Razão Social / Nome</Label><Input onChange={e => updateForm('razao_social', e.target.value)} /></div>
+                
+                {category === "Cadastro Cliente" && (
+                    <div className="bg-yellow-100 p-2 text-xs text-yellow-800 rounded border border-yellow-200 font-semibold">
+                        ⚠️ Observação: Cadastro só pode ser solicitado após análise de crédito aprovada.
+                    </div>
+                )}
+
+                <div className="grid gap-2">
+                    <Label>Razão Social / Nome</Label>
+                    <Input onChange={e => updateForm('razao_social', e.target.value)} />
+                </div>
+                
                 <div className="grid grid-cols-2 gap-3">
                     <div><Label>Inscrição Estadual</Label><Input onChange={e => updateForm('ie', e.target.value)} /></div>
                     <div><Label>Telefone</Label><Input onChange={e => updateForm('telefone', e.target.value)} /></div>
                 </div>
-                <div><Label>E-mail</Label><Input type="email" onChange={e => updateForm('email', e.target.value)} /></div>
+                <div><Label>E-mail (Financeiro/Comercial)</Label><Input type="email" onChange={e => updateForm('email', e.target.value)} /></div>
+                
+                <div className="bg-white p-3 border rounded border-dashed border-blue-300 mt-2">
+                    <Label className="flex items-center gap-2 text-blue-800"><UploadCloud size={16}/> Anexar Cartão CNPJ (Obrigatório)</Label>
+                    <p className="text-[10px] text-gray-500 mb-2">Faça o upload do arquivo PDF ou Imagem do cartão.</p>
+                </div>
             </div>
         )
+
       case "Cadastro Mercadoria":
         return (
             <div className="grid gap-3 border p-4 rounded-md bg-purple-50">
@@ -212,34 +237,52 @@ export function NewTicket() {
                     <div><Label>Medidas</Label><Input onChange={e => updateForm('medidas', e.target.value)} /></div>
                     <div><Label>Aplicação</Label><Input onChange={e => updateForm('aplicacao', e.target.value)} /></div>
                 </div>
-                <div>
+                
+                <div className="mt-2">
                     <Label>Alocação (Destino)</Label>
                     <Select onValueChange={val => updateForm('alocacao', val)}>
                         <SelectTrigger className="bg-white"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="Revenda">Revenda</SelectItem>
-                            <SelectItem value="Frota">Frota</SelectItem>
-                            <SelectItem value="Almoxarifado">Almoxarifado</SelectItem>
+                            <SelectItem value="Revenda">Revenda (Itens a Revender)</SelectItem>
+                            <SelectItem value="Frota">Frota (Maq/Bat/Carreg)</SelectItem>
+                            <SelectItem value="Almoxarifado">Almoxarifado (Peças/Insumos)</SelectItem>
                         </SelectContent>
                     </Select>
+                    <p className="text-[10px] text-gray-500 mt-1">
+                        * Revenda: Venda externa. Frota: Uso interno. Almox: Estoque de manutenção.
+                    </p>
                 </div>
             </div>
         )
+
       case "Emissão de Documento":
         return (
             <div className="grid gap-3 border p-4 rounded-md bg-green-50">
-                <Label className="font-bold text-green-800">Tipo de Emissão (OV Obrigatória)</Label>
+                <Label>Tipo de Emissão</Label>
                 <div className="grid gap-2">
                      {["Remessa Conserto", "Remessa Locação", "Fatur. Serviço", "Fatur. Peças", "Mau Uso"].map((tipo) => (
-                        <div key={tipo} className="flex items-center space-x-2 bg-white p-2 rounded border hover:bg-gray-50">
-                            <input type="radio" name="tipo_doc" id={tipo} value={tipo} onChange={(e) => updateForm('tipo_emissao', e.target.value)} className="h-4 w-4 accent-black cursor-pointer" />
-                            <label htmlFor={tipo} className="text-sm font-medium cursor-pointer w-full">{tipo}</label>
+                        <div key={tipo} className="flex items-center space-x-2 bg-white p-2 rounded border hover:bg-gray-50 cursor-pointer">
+                            <input 
+                                type="radio" 
+                                name="tipo_doc" 
+                                id={tipo} 
+                                value={tipo}
+                                onChange={(e) => updateForm('tipo_emissao', e.target.value)}
+                                className="h-4 w-4 accent-black cursor-pointer"
+                            />
+                            <label htmlFor={tipo} className="text-sm font-medium leading-none cursor-pointer w-full">
+                                {tipo}
+                            </label>
                         </div>
                      ))}
                 </div>
-                <div className="mt-2"><Label>Observações</Label><Textarea onChange={e => updateForm('description', e.target.value)} /></div>
+                <div className="mt-2">
+                    <Label>Observações Adicionais</Label>
+                    <Textarea placeholder="Detalhes para a emissão..." onChange={e => updateForm('description', e.target.value)} />
+                </div>
             </div>
         )
+
       default: return <div className="grid gap-3"><Label>Assunto</Label><Input value={title} onChange={e => setTitle(e.target.value)} /><Label>Descrição</Label><Textarea onChange={e => updateForm('description', e.target.value)} /></div>
     }
   }
@@ -247,23 +290,32 @@ export function NewTicket() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className="bg-[#F3C843] text-black hover:bg-[#d4ac33] font-bold">+ Nova Solicitação</Button>
+        <Button className="bg-[#F3C843] text-black hover:bg-[#d4ac33] font-bold">
+          + Nova Solicitação
+        </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Nova Solicitação</DialogTitle></DialogHeader>
         
         <div className="grid gap-4 py-4">
-          {/* CAMPO SOLICITANTE NO TOPO */}
-          <div className="bg-slate-100 p-3 rounded border border-slate-200">
+          
+          {/* CAMPO NOVO: NOME DO SOLICITANTE */}
+          <div className="bg-slate-100 p-3 rounded border">
             <Label className="font-bold text-gray-700">Nome do Solicitante *</Label>
-            <Input value={requesterName} onChange={e => setRequesterName(e.target.value)} placeholder="Seu nome ou departamento" required className="bg-white mt-1" />
+            <Input 
+                value={requesterName} 
+                onChange={e => setRequesterName(e.target.value)} 
+                placeholder="Informe seu nome ou setor"
+                className="bg-white mt-1 border-gray-300"
+                required
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
                 <Label>Tipo de Solicitação</Label>
                 <Select onValueChange={setCategory} defaultValue="Geral">
-                    <SelectTrigger className="border-gray-400 font-bold"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="border-gray-400 font-bold"><SelectValue placeholder="..." /></SelectTrigger>
                     <SelectContent>
                         <SelectItem value="Geral">Geral</SelectItem>
                         <SelectItem value="Nova Locação">Nova Locação</SelectItem>
@@ -291,6 +343,13 @@ export function NewTicket() {
           {renderFields()}
 
           <div className="border-t pt-4 mt-2 bg-gray-50 p-3 rounded border-dashed border border-gray-300">
+            {/* Observação dinâmica para Nova Locação ou Cadastros */}
+            {category === "Nova Locação" && (
+                <div className="bg-amber-100 p-2 text-xs text-amber-800 rounded mb-3 border border-amber-200 font-bold">
+                    ⚠️ Obrigatório: Cartão CNPJ, Dados Cadastrais, Proposta e docs relevantes.
+                </div>
+            )}
+
             <Label className="mb-2 block font-semibold flex items-center gap-2"><UploadCloud size={16}/> 
                 {category.includes('Cadastro') ? "Anexar Arquivo (CNPJ Obrigatório aqui)" : "Anexar Arquivo (Opcional)"}
             </Label>
