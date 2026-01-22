@@ -88,6 +88,7 @@ function DashboardContent() {
                 <thead className="text-xs text-gray-700 uppercase bg-gray-50 border-b">
                     <tr>
                         <th className="px-6 py-3">ID</th>
+                        <th className="px-6 py-3">Solicitante</th> {/* NOVA COLUNA HEADER */}
                         <th className="px-6 py-3 w-1/3">Assunto / Descrição</th>
                         <th className="px-6 py-3">Categoria</th>
                         <th className="px-6 py-3">Prioridade</th>
@@ -98,7 +99,7 @@ function DashboardContent() {
                 <tbody>
                     {tickets.length === 0 ? (
                         <tr>
-                            <td colSpan={6} className="px-6 py-10 text-center text-gray-500">
+                            <td colSpan={7} className="px-6 py-10 text-center text-gray-500">
                                 Nenhuma solicitação encontrada.
                             </td>
                         </tr>
@@ -110,6 +111,12 @@ function DashboardContent() {
                                 onClick={() => window.location.href = `/dashboard/ticket/${ticket.id}`} 
                             >
                                 <td className="px-6 py-4 font-mono text-gray-500">#{ticket.id}</td>
+                                
+                                {/* NOVA COLUNA DADO */}
+                                <td className="px-6 py-4 font-medium text-gray-800">
+                                    {ticket.requester_name || "—"}
+                                </td>
+
                                 <td className="px-6 py-4">
                                     <div className="font-bold text-gray-900">{ticket.title}</div>
                                     <div className="text-xs text-gray-500 line-clamp-1 mt-1">{ticket.description}</div>
