@@ -214,11 +214,14 @@ export function NewTicket() {
                     <Select onValueChange={val => updateForm('alocacao', val)}>
                         <SelectTrigger className="bg-white"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="Revenda">Revenda</SelectItem>
-                            <SelectItem value="Frota">Frota</SelectItem>
-                            <SelectItem value="Almoxarifado">Almoxarifado</SelectItem>
+                            <SelectItem value="Revenda">Revenda (Itens a Revender)</SelectItem>
+                            <SelectItem value="Frota">Frota (Maq/Bat/Carreg)</SelectItem>
+                            <SelectItem value="Almoxarifado">Almoxarifado (Peças/Insumos)</SelectItem>
                         </SelectContent>
                     </Select>
+                    <p className="text-[10px] text-gray-500 mt-1">
+                        * Revenda: Venda externa. Frota: Uso interno. Almox: Estoque de manutenção.
+                    </p>
                 </div>
             </div>
         )
