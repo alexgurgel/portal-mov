@@ -11,17 +11,28 @@ interface ExportTicketsProps {
 export function ExportTickets({ data }: ExportTicketsProps) {
   
   const handleExport = () => {
-    // Aqui formatamos os dados para o Excel ficar "bonito"
-    const formattedData = data.map(ticket => ({
-      ID: ticket.id,
-      Solicitante: ticket.requester_name || "N/A", // NOVO CAMPO NO EXCEL
-      Data: new Date(ticket.created_at).toLocaleDateString('pt-BR'),
-      Categoria: ticket.category,
-      Prioridade: ticket.priority,
-      Status: ticket.status,
-      Assunto: ticket.title,
-      Descrição: ticket.description
-    }))
+    // Formatamos os dados incluindo a nova coluna de resolução
+    const formattedData = data.map(ticket => {
+      // Consideramos resolvido se o status for 'resolvido' ou 'concluido'
+      const foiResolvido = ticket.status === 'resolvido' || ticket.status === 'concluido'
+      
+      // Se resolvido, usamos a data da última atualização (updated_at)
+      const dataResolucao = foiResolvido && ticket.updated_at
+        ? new Date(ticket.updated_at).toLocaleDateString('pt-BR') 
+        : "Pendente"
+
+      return {
+        ID: ticket.id,
+        Solicitante: ticket.requester_name || "N/A",
+        "Data de Abertura": new Date(ticket.created_at).toLocaleDateString('pt-BR'),
+        "Data de Resolução": dataResolucao, // NOVA COLUNA SOLICITADA
+        Categoria: ticket.category,
+        Prioridade: ticket.priority,
+        Status: ticket.status.toUpperCase(),
+        Assunto: ticket.title,
+        Descrição: ticket.description
+      }
+    })
 
     const worksheet = XLSX.utils.json_to_sheet(formattedData)
     const workbook = XLSX.utils.book_new()
