@@ -28,7 +28,7 @@ export function NewTicket() {
   const router = useRouter()
 
   // Estados do Formulário
-  const [requesterName, setRequesterName] = useState("") // NOVO CAMPO
+  const [requesterName, setRequesterName] = useState("")
   const [category, setCategory] = useState("")
   const [priority, setPriority] = useState("normal")
   const [title, setTitle] = useState("")
@@ -84,7 +84,7 @@ export function NewTicket() {
           priority,
           status: 'aberto',
           user_id: user.id,
-          requester_name: requesterName, // SALVANDO NOVO CAMPO
+          requester_name: requesterName,
           attachment_url: fileUrl
         })
 
@@ -104,7 +104,7 @@ export function NewTicket() {
   }
 
   const resetForm = () => {
-    setRequesterName("") // LIMPAR NOVO CAMPO
+    setRequesterName("")
     setTitle("")
     setDescription("")
     setCategory("")
@@ -131,13 +131,12 @@ export function NewTicket() {
 
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
           
-          {/* NOVO CAMPO: SOLICITANTE */}
           <div className="space-y-2 bg-yellow-50 p-3 rounded border border-yellow-200">
             <label className="text-sm font-bold text-gray-700">Nome do Solicitante *</label>
             <Input 
                 value={requesterName} 
                 onChange={(e) => setRequesterName(e.target.value)} 
-                placeholder="Quem está pedindo? (Ex: Seu nome ou Setor)" 
+                placeholder="Quem está pedindo? (Ex: Seu nome)" 
                 required 
                 className="bg-white"
             />
@@ -155,8 +154,9 @@ export function NewTicket() {
                   <SelectItem value="Nova Locação">Nova Locação</SelectItem>
                   <SelectItem value="Cadastro Cliente">Cadastro Cliente</SelectItem>
                   <SelectItem value="Cadastro Fornecedor">Cadastro Fornecedor</SelectItem>
+                  <SelectItem value="Compra">Compra</SelectItem>
+                  <SelectItem value="Cotação">Cotação</SelectItem>
                   <SelectItem value="Emissão de Documento">Emissão de Documento</SelectItem>
-                  <SelectItem value="Outros">Outros / TI</SelectItem>
                 </SelectContent>
               </Select>
             </div>
