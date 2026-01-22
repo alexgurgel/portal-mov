@@ -35,10 +35,14 @@ export function NewTicket() {
   const [description, setDescription] = useState("")
   const [file, setFile] = useState<File | null>(null)
 
-  // Campos específicos de Mercadoria
+  // Campos específicos de Compra e Cotação (A CARA ANTIGA)
   const [codigo, setCodigo] = useState("")
-  const [medidas, setMedidas] = useState("")
+  const [pat, setPat] = useState("")
+  const [quantidade, setQuantidade] = useState("")
   const [aplicacao, setAplicacao] = useState("")
+
+  // Campos exclusivos de Cadastro Mercadoria
+  const [medidas, setMedidas] = useState("")
   const [alocacao, setAlocacao] = useState("")
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -70,8 +74,11 @@ export function NewTicket() {
         }
       }
 
+      // Montagem da descrição baseada na categoria
       let finalDescription = description
-      if (category === "Cadastro Mercadoria") {
+      if (category === "Compra" || category === "Cotação") {
+        finalDescription = `Código: ${codigo}\nPat: ${pat}\nQuantidade: ${quantidade}\nAplicação: ${aplicacao}\n\nDescrição: ${description}`
+      } else if (category === "Cadastro Mercadoria") {
         finalDescription = `Código: ${codigo}\nMedidas: ${medidas}\nAplicação: ${aplicacao}\nAlocação: ${alocacao}\n\nDescrição: ${description}`
       }
 
@@ -111,8 +118,10 @@ export function NewTicket() {
     setPriority("normal")
     setFile(null)
     setCodigo("")
-    setMedidas("")
+    setPat("")
+    setQuantidade("")
     setAplicacao("")
+    setMedidas("")
     setAlocacao("")
   }
 
@@ -136,7 +145,7 @@ export function NewTicket() {
             <Input 
                 value={requesterName} 
                 onChange={(e) => setRequesterName(e.target.value)} 
-                placeholder="Quem está pedindo? (Ex: Seu nome)" 
+                placeholder="Nome de quem está solicitando" 
                 required 
                 className="bg-white"
             />
@@ -177,7 +186,37 @@ export function NewTicket() {
             </div>
           </div>
 
-          {/* CAMPOS ESPECÍFICOS DE MERCADORIA */}
+          {/* FORMULÁRIO COMPRA E COTAÇÃO (CARA ANTIGA) */}
+          {(category === "Compra" || category === "Cotação") && (
+            <div className="bg-gray-50 p-4 rounded-md space-y-3 border border-gray-200">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-gray-500">Código</label>
+                  <Input value={codigo} onChange={e => setCodigo(e.target.value)} placeholder="Ex: 444" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-gray-500">Descrição (Catálogo)</label>
+                  <Input value={description} onChange={e => setDescription(e.target.value)} placeholder="Ex: 14411" required />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-gray-500">Pat</label>
+                  <Input value={pat} onChange={e => setPat(e.target.value)} placeholder="Ex: 123" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-gray-500">Quantidade</label>
+                  <Input value={quantidade} onChange={e => setQuantidade(e.target.value)} placeholder="Ex: 5" />
+                </div>
+              </div>
+              <div>
+                  <label className="text-xs font-bold text-gray-500">Aplicação</label>
+                  <Input value={aplicacao} onChange={e => setAplicacao(e.target.value)} placeholder="Ex: EGV" />
+              </div>
+            </div>
+          )}
+
+          {/* FORMULÁRIO CADASTRO MERCADORIA */}
           {category === "Cadastro Mercadoria" && (
             <div className="bg-gray-50 p-4 rounded-md space-y-3 border border-gray-200">
               <div className="grid grid-cols-2 gap-3">
@@ -212,31 +251,20 @@ export function NewTicket() {
                     <SelectItem value="Almoxarifado">Almoxarifado (Manutenção)</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-[10px] text-gray-400 mt-1">* Revenda: Venda externa. Frota: Uso interno.</p>
               </div>
             </div>
           )}
 
-          {category !== "Cadastro Mercadoria" && (
+          {/* FORMULÁRIO SIMPLES (Demais categorias) */}
+          {category !== "" && category !== "Compra" && category !== "Cotação" && category !== "Cadastro Mercadoria" && (
             <>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Assunto / Título</label>
-                <Input 
-                  value={title} 
-                  onChange={(e) => setTitle(e.target.value)} 
-                  placeholder="Resumo da solicitação" 
-                  required 
-                />
+                <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Resumo da solicitação" required />
               </div>
-              
               <div className="space-y-2">
                 <label className="text-sm font-medium">Descrição Detalhada</label>
-                <Textarea 
-                  value={description} 
-                  onChange={(e) => setDescription(e.target.value)} 
-                  placeholder="Descreva o que precisa..." 
-                  rows={4} 
-                />
+                <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Descreva o que precisa..." rows={4} />
               </div>
             </>
           )}
@@ -264,18 +292,10 @@ export function NewTicket() {
                 </div>
             )}
 
-            <Input 
-              type="file" 
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
-              className="bg-white cursor-pointer"
-            />
+            <Input type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} className="bg-white cursor-pointer" />
           </div>
 
-          <Button 
-            type="submit" 
-            className="w-full bg-gray-900 text-white hover:bg-gray-800"
-            disabled={loading}
-          >
+          <Button type="submit" className="w-full bg-gray-900 text-white hover:bg-gray-800" disabled={loading}>
             {loading ? "Processando..." : "Criar Solicitação"}
           </Button>
 
