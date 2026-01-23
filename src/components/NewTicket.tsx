@@ -56,6 +56,7 @@ export function NewTicket() {
   const removeItem = (index: number) => setItems(items.filter((_, i) => i !== index))
 
   async function handleSubmit() {
+    // 1. Validações
     if (!requesterName) return alert("Por favor, informe o Nome do Solicitante.")
     if (!formData.prioridade) return alert("Por favor, selecione a Prioridade.")
 
@@ -66,9 +67,18 @@ export function NewTicket() {
     setLoading(true)
 
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error("Usuário não logado.")
+      // --- CORREÇÃO DO ERRO DE FOREIGN KEY ---
+      // Buscamos a sessão ativa para garantir que temos o ID correto
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      
+      if (sessionError || !session?.user) {
+         // Se a sessão estiver inválida, forçamos o erro para avisar o usuário
+         throw new Error("Sessão expirada. Por favor, faça logout e entre novamente.")
+      }
+      
+      const userId = session.user.id
 
+      // 2. Upload de Arquivo
       let urlArquivo = "", nomeArquivo = ""
       if (arquivoParaUpload) {
         nomeArquivo = arquivoParaUpload.name
@@ -79,6 +89,7 @@ export function NewTicket() {
         urlArquivo = dataUrl.publicUrl
       }
 
+      // 3. Preparar Títulos e Descrições
       let finalTitle = title
       let description = formData.description || ""
 
@@ -102,13 +113,14 @@ export function NewTicket() {
         finalTitle = `${category}: ${primeiro} ${items.length > 1 ? `(+${items.length - 1})` : ''}`
       }
 
+      // 4. Inserção no Banco
       const { error } = await supabase.from('tickets').insert({
         title: finalTitle || category,
         description: description,
         priority: formData.prioridade,
         category: category,
         status: 'aberto',
-        user_id: user.id,
+        user_id: userId, // Usando o ID validado da sessão
         requester_name: requesterName,
         custom_data: {
           ...formData,
@@ -119,12 +131,19 @@ export function NewTicket() {
       })
 
       if (error) throw error
-      alert("Solicitação criada!")
+      
+      alert("Solicitação criada com sucesso!")
       setOpen(false)
       window.location.reload()
 
     } catch (error: any) {
-      alert("Erro: " + error.message)
+      console.error(error)
+      // Mensagem amigável se for o erro de chave estrangeira
+      if (error.message && error.message.includes("foreign key constraint")) {
+         alert("Erro de permissão: Seu usuário foi criado recentemente. Por favor, SAIA do sistema (Logout) e entre novamente para validar seu cadastro.")
+      } else {
+         alert("Erro: " + error.message)
+      }
     } finally {
       setLoading(false)
     }
