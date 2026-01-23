@@ -22,9 +22,12 @@ function DashboardContent() {
 
   useEffect(() => {
     const fetchTickets = async () => {
+      // --- ALTERAÇÃO AQUI ---
+      // Adicionei .neq('category', 'Controle de Relatorio') para esconder essa categoria da visão geral
       let query = supabase
         .from('tickets')
         .select('*')
+        .neq('category', 'Controle de Relatorio') 
         .order('created_at', { ascending: false })
 
       if (setorFiltrado) {
@@ -88,7 +91,7 @@ function DashboardContent() {
                 <thead className="text-xs text-gray-700 uppercase bg-gray-50 border-b">
                     <tr>
                         <th className="px-6 py-3">ID</th>
-                        <th className="px-6 py-3">Solicitante</th> {/* NOVA COLUNA HEADER */}
+                        <th className="px-6 py-3">Solicitante</th>
                         <th className="px-6 py-3 w-1/3">Assunto / Descrição</th>
                         <th className="px-6 py-3">Categoria</th>
                         <th className="px-6 py-3">Prioridade</th>
@@ -112,7 +115,6 @@ function DashboardContent() {
                             >
                                 <td className="px-6 py-4 font-mono text-gray-500">#{ticket.id}</td>
                                 
-                                {/* NOVA COLUNA DADO */}
                                 <td className="px-6 py-4 font-medium text-gray-800">
                                     {ticket.requester_name || "—"}
                                 </td>
