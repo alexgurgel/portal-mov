@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea" // Adicionado
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import {
   Dialog,
@@ -12,8 +13,9 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription
 } from "@/components/ui/dialog"
-import { CheckCircle2, AlertCircle, Clock, DownloadCloud } from "lucide-react"
+import { CheckCircle2, AlertCircle, Clock, DownloadCloud, Undo2, AlertTriangle } from "lucide-react"
 
 export default function TicketDetails() {
   const params = useParams()
@@ -26,12 +28,15 @@ export default function TicketDetails() {
   const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null)
   const [resolutionData, setResolutionData] = useState({ valor: '', oc: '', previsao: '' })
 
+  // Estados para DEVOLUÇÃO (Novo)
+  const [returnModalOpen, setReturnModalOpen] = useState(false)
+  const [returnReason, setReturnReason] = useState("")
+
   // 1. Busca os dados do ticket
   useEffect(() => {
     async function fetchTicket() {
       if (!params.id) return
       
-      // Buscamos apenas o ticket (sem profiles para evitar erro de relação por enquanto)
       const { data, error } = await supabase
         .from('tickets')
         .select('*')
@@ -49,24 +54,20 @@ export default function TicketDetails() {
   }, [params.id])
 
   // --- LÓGICA DE BAIXA DE ITEM ---
-  
   const abrirModalBaixa = (index: number) => {
     setSelectedItemIndex(index)
-    setResolutionData({ valor: '', oc: '', previsao: '' }) // Limpa campos
+    setResolutionData({ valor: '', oc: '', previsao: '' }) 
     setModalOpen(true)
   }
 
   const confirmarBaixaItem = async () => {
     if (selectedItemIndex === null || !ticket) return
 
-    // Validação básica
     if (ticket.category === 'Cotação' && !resolutionData.valor) return alert("Informe o preço!")
     if (ticket.category === 'Compras' && (!resolutionData.oc || !resolutionData.previsao)) return alert("Informe OC e Previsão!")
 
-    // 1. Clona a estrutura atual dos itens
     const novosItens = [...ticket.custom_data.itens_tabela]
     
-    // 2. Atualiza o item específico com os dados da baixa
     novosItens[selectedItemIndex] = {
         ...novosItens[selectedItemIndex],
         status: 'concluido',
@@ -76,11 +77,9 @@ export default function TicketDetails() {
         }
     }
 
-    // 3. Verifica se TODOS os itens estão concluídos
     const todosConcluidos = novosItens.every((item: any) => item.status === 'concluido')
     const novoStatusTicket = todosConcluidos ? 'resolvido' : 'em_andamento'
 
-    // 4. Salva no Supabase
     const novoCustomData = { ...ticket.custom_data, itens_tabela: novosItens }
 
     const { error } = await supabase
@@ -94,14 +93,14 @@ export default function TicketDetails() {
     if (!error) {
         setTicket({ ...ticket, custom_data: novoCustomData, status: novoStatusTicket })
         setModalOpen(false)
-        alert(todosConcluidos ? "Item baixado! Todos os itens foram resolvidos, ticket fechado." : "Item baixado com sucesso!")
+        alert(todosConcluidos ? "Ticket finalizado com sucesso!" : "Item baixado com sucesso!")
         if(todosConcluidos) router.push('/dashboard')
     } else {
         alert("Erro ao salvar.")
     }
   }
 
-  // --- LÓGICA GERAL DO TICKET ---
+  // --- LÓGICA GERAL E DEVOLUÇÃO ---
 
   async function updateGlobalStatus(newStatus: string) {
     const { error } = await supabase.from('tickets').update({ status: newStatus }).eq('id', ticket.id)
@@ -109,6 +108,33 @@ export default function TicketDetails() {
         setTicket({ ...ticket, status: newStatus })
         if(newStatus === 'resolvido') router.push('/dashboard')
     }
+  }
+
+  // Nova Função: Confirmar Devolução
+  async function confirmarDevolucao() {
+      if (!returnReason.trim()) return alert("Por favor, explique o motivo da devolução.")
+
+      const novoCustomData = {
+          ...ticket.custom_data,
+          motivo_devolucao: returnReason // Salva o motivo dentro dos dados do ticket
+      }
+
+      const { error } = await supabase
+          .from('tickets')
+          .update({ 
+              status: 'devolvida',
+              custom_data: novoCustomData
+          })
+          .eq('id', ticket.id)
+
+      if (!error) {
+          setTicket({ ...ticket, status: 'devolvida', custom_data: novoCustomData })
+          setReturnModalOpen(false)
+          setReturnReason("")
+          alert("Solicitação devolvida ao solicitante.")
+      } else {
+          alert("Erro ao devolver.")
+      }
   }
 
   const formatKey = (key: string) => key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
@@ -131,29 +157,44 @@ export default function TicketDetails() {
             <div className="flex items-center gap-3">
                 <h1 className="text-3xl font-bold text-gray-900">Ticket #{ticket.id}</h1>
                 <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
-                    ticket.status === 'resolvido' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                    ticket.status === 'resolvido' ? 'bg-green-100 text-green-800' : 
+                    ticket.status === 'devolvida' ? 'bg-orange-100 text-orange-800' :
+                    'bg-yellow-100 text-yellow-800'
                 }`}>
-                    {ticket.status.replace('_', ' ')}
+                    {ticket.status === 'devolvida' ? 'Devolvida' : ticket.status.replace('_', ' ')}
                 </span>
             </div>
             <p className="text-gray-500 mt-1 text-lg">{ticket.title}</p>
         </div>
       </div>
 
+      {/* --- BANNER DE DEVOLUÇÃO (SE EXISTIR) --- */}
+      {ticket.status === 'devolvida' && ticket.custom_data?.motivo_devolucao && (
+          <div className="bg-orange-50 border-l-4 border-orange-500 p-4 rounded shadow-sm">
+              <div className="flex items-start gap-3">
+                  <AlertTriangle className="text-orange-600 mt-1" />
+                  <div>
+                      <h3 className="font-bold text-orange-800">Solicitação Devolvida</h3>
+                      <p className="text-orange-900 mt-1 font-medium">Motivo: "{ticket.custom_data.motivo_devolucao}"</p>
+                      <p className="text-xs text-orange-700 mt-2">Por favor, ajuste o necessário e abra uma nova solicitação ou entre em contato.</p>
+                  </div>
+              </div>
+          </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         
         {/* COLUNA ESQUERDA (Detalhes e Lista) */}
         <div className="md:col-span-3 space-y-6">
             
-            {/* ALERTA DE PENDÊNCIA */}
-            {ticket.status !== 'resolvido' && itensTabela && (
-                <div className={`p-4 rounded-md flex items-center gap-3 ${pendencias > 0 ? 'bg-orange-50 border border-orange-200' : 'bg-green-50 border border-green-200'}`}>
-                    {pendencias > 0 ? <AlertCircle className="text-orange-500" /> : <CheckCircle2 className="text-green-500" />}
+            {/* ALERTA DE PENDÊNCIA (Se não for devolvida nem resolvido) */}
+            {ticket.status !== 'resolvido' && ticket.status !== 'devolvida' && itensTabela && (
+                <div className={`p-4 rounded-md flex items-center gap-3 ${pendencias > 0 ? 'bg-blue-50 border border-blue-200' : 'bg-green-50 border border-green-200'}`}>
+                    {pendencias > 0 ? <Clock className="text-blue-500" /> : <CheckCircle2 className="text-green-500" />}
                     <div>
                         <p className="font-bold text-gray-800">
-                            {pendencias > 0 ? `Atenção: Existem ${pendencias} itens pendentes neste ticket.` : "Todos os itens foram resolvidos."}
+                            {pendencias > 0 ? `Existem ${pendencias} itens pendentes.` : "Todos os itens foram processados."}
                         </p>
-                        <p className="text-sm text-gray-600">O ticket só será finalizado quando todos os itens forem baixados.</p>
                     </div>
                 </div>
             )}
@@ -161,7 +202,7 @@ export default function TicketDetails() {
             <Card>
                 <CardHeader>
                     <CardTitle>Detalhes da Solicitação</CardTitle>
-                    <CardDescription>Categoria: <b>{ticket.category}</b></CardDescription>
+                    <CardDescription>Solicitante: <b>{ticket.requester_name || 'Desconhecido'}</b> | Categoria: <b>{ticket.category}</b></CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                     
@@ -171,7 +212,7 @@ export default function TicketDetails() {
                         <p className="whitespace-pre-wrap">{ticket.description}</p>
                     </div>
 
-                    {/* --- TABELA INTELIGENTE (Cotação/Compras) --- */}
+                    {/* --- TABELA INTELIGENTE --- */}
                     {itensTabela && Array.isArray(itensTabela) && itensTabela.length > 0 && (
                         <div className="border rounded overflow-hidden">
                             <div className="bg-gray-100 p-3 text-xs font-bold text-gray-700 border-b grid grid-cols-12 gap-4 items-center">
@@ -195,7 +236,6 @@ export default function TicketDetails() {
                                         <div className="col-span-1 text-center font-bold bg-gray-100 rounded p-1">{item.qtd}</div>
                                         <div className="col-span-2 text-xs text-gray-500">{item.aplicacao || '-'}</div>
                                         
-                                        {/* COLUNA DE RESOLUÇÃO (O que foi feito) */}
                                         <div className="col-span-2 text-xs">
                                             {isDone ? (
                                                 <div className="text-green-700">
@@ -209,9 +249,8 @@ export default function TicketDetails() {
                                             )}
                                         </div>
 
-                                        {/* BOTÃO DE AÇÃO */}
                                         <div className="col-span-2 text-center">
-                                            {!isDone && (
+                                            {!isDone && ticket.status !== 'devolvida' && (
                                                 <Button 
                                                     size="sm" 
                                                     onClick={() => abrirModalBaixa(idx)}
@@ -231,7 +270,7 @@ export default function TicketDetails() {
                     {ticket.custom_data && (
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
                             {Object.entries(ticket.custom_data).map(([key, value]) => {
-                                if (['description', 'prioridade', 'itens_tabela', 'nome_arquivo_anexo', 'url_arquivo_anexo'].includes(key)) return null
+                                if (['description', 'prioridade', 'itens_tabela', 'nome_arquivo_anexo', 'url_arquivo_anexo', 'motivo_devolucao'].includes(key)) return null
                                 if (!value) return null
                                 return (
                                     <div key={key} className="bg-white p-3 rounded border shadow-sm">
@@ -269,16 +308,28 @@ export default function TicketDetails() {
                 </CardContent>
             </Card>
 
-            {/* Ações Globais (Só mostra se não for lista de itens, ou se quiser forçar fechamento) */}
-            {(!itensTabela || itensTabela.length === 0) && (
-                <div className="flex gap-4 justify-end">
-                    {ticket.status !== 'resolvido' && (
-                        <Button onClick={() => updateGlobalStatus('resolvido')} className="bg-green-600 hover:bg-green-700 text-white">
-                            Marcar Chamado Inteiro como Resolvido
+            {/* AÇÕES GLOBAIS (Rodapé) */}
+            <div className="flex gap-4 justify-end mt-6 border-t pt-6">
+                {ticket.status !== 'resolvido' && ticket.status !== 'devolvida' && (
+                    <>
+                         {/* BOTÃO DE DEVOLUÇÃO */}
+                        <Button 
+                            variant="outline"
+                            onClick={() => setReturnModalOpen(true)} 
+                            className="border-orange-200 text-orange-700 hover:bg-orange-50 hover:text-orange-800 gap-2"
+                        >
+                            <Undo2 size={16} /> Devolver Solicitação
                         </Button>
-                    )}
-                </div>
-            )}
+
+                        {/* BOTÃO DE RESOLUÇÃO */}
+                        {(!itensTabela || itensTabela.length === 0) && (
+                            <Button onClick={() => updateGlobalStatus('resolvido')} className="bg-green-600 hover:bg-green-700 text-white gap-2">
+                                <CheckCircle2 size={16} /> Marcar como Resolvido
+                            </Button>
+                        )}
+                    </>
+                )}
+            </div>
         </div>
       </div>
 
@@ -288,7 +339,6 @@ export default function TicketDetails() {
             <DialogHeader>
                 <DialogTitle>Baixar Item</DialogTitle>
             </DialogHeader>
-            
             <div className="py-4 space-y-4">
                 {selectedItemIndex !== null && itensTabela && (
                     <div className="bg-gray-100 p-3 rounded mb-4">
@@ -296,51 +346,54 @@ export default function TicketDetails() {
                         <p className="text-xs text-gray-500">Qtd: {itensTabela[selectedItemIndex].qtd}</p>
                     </div>
                 )}
-
-                {/* FORMULÁRIO DINÂMICO BASEADO NO TIPO */}
+                {/* Formulario Baixa (Mantido igual) */}
                 {ticket.category === 'Cotação' ? (
-                    <div>
-                        <Label>Preço de Compra / Fornecedor Fechado</Label>
-                        <Input 
-                            placeholder="Ex: R$ 150,00 - Loja do Mecânico" 
-                            value={resolutionData.valor}
-                            onChange={e => setResolutionData({...resolutionData, valor: e.target.value})}
-                        />
-                    </div>
+                    <div><Label>Preço Fechado</Label><Input value={resolutionData.valor} onChange={e => setResolutionData({...resolutionData, valor: e.target.value})} /></div>
                 ) : ticket.category === 'Compras' ? (
                     <div className="grid gap-4">
-                        <div>
-                            <Label>Número da O.C. (Ordem de Compra)</Label>
-                            <Input 
-                                placeholder="Ex: 12345" 
-                                value={resolutionData.oc}
-                                onChange={e => setResolutionData({...resolutionData, oc: e.target.value})}
-                            />
-                        </div>
-                        <div>
-                            <Label>Previsão de Entrega</Label>
-                            <Input 
-                                type="date"
-                                value={resolutionData.previsao}
-                                onChange={e => setResolutionData({...resolutionData, previsao: e.target.value})}
-                            />
-                        </div>
+                        <div><Label>O.C.</Label><Input value={resolutionData.oc} onChange={e => setResolutionData({...resolutionData, oc: e.target.value})} /></div>
+                        <div><Label>Previsão</Label><Input type="date" value={resolutionData.previsao} onChange={e => setResolutionData({...resolutionData, previsao: e.target.value})} /></div>
                     </div>
                 ) : (
-                    <div>
-                        <Label>Observação de Conclusão</Label>
-                        <Input 
-                            placeholder="O que foi feito?" 
-                            value={resolutionData.valor}
-                            onChange={e => setResolutionData({...resolutionData, valor: e.target.value})}
-                        />
-                    </div>
+                    <div><Label>Observação</Label><Input value={resolutionData.valor} onChange={e => setResolutionData({...resolutionData, valor: e.target.value})} /></div>
                 )}
             </div>
-
             <DialogFooter>
                 <Button variant="outline" onClick={() => setModalOpen(false)}>Cancelar</Button>
                 <Button onClick={confirmarBaixaItem} className="bg-black text-white">Confirmar Baixa</Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- NOVO: MODAL DE DEVOLUÇÃO --- */}
+      <Dialog open={returnModalOpen} onOpenChange={setReturnModalOpen}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle className="text-orange-700 flex items-center gap-2">
+                    <Undo2 size={20}/> Devolver Solicitação
+                </DialogTitle>
+                <DialogDescription>
+                    Explique o motivo para que o solicitante possa corrigir.
+                </DialogDescription>
+            </DialogHeader>
+            
+            <div className="py-4 space-y-4">
+                <div className="space-y-2">
+                    <Label>Motivo da Devolução</Label>
+                    <Textarea 
+                        placeholder="Ex: Faltou anexar o comprovante; A quantidade está incorreta..." 
+                        rows={4}
+                        value={returnReason}
+                        onChange={e => setReturnReason(e.target.value)}
+                    />
+                </div>
+            </div>
+
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setReturnModalOpen(false)}>Cancelar</Button>
+                <Button onClick={confirmarDevolucao} className="bg-orange-600 hover:bg-orange-700 text-white">
+                    Confirmar Devolução
+                </Button>
             </DialogFooter>
         </DialogContent>
       </Dialog>

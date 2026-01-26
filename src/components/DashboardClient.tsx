@@ -22,8 +22,7 @@ function DashboardContent() {
 
   useEffect(() => {
     const fetchTickets = async () => {
-      // --- ALTERAÇÃO AQUI ---
-      // Adicionei .neq('category', 'Controle de Relatorio') para esconder essa categoria da visão geral
+      // Busca tickets, excluindo o controle de relatório da visão geral
       let query = supabase
         .from('tickets')
         .select('*')
@@ -49,8 +48,14 @@ function DashboardContent() {
       case 'resolvido': return 'bg-green-100 text-green-700'
       case 'em_andamento': return 'bg-yellow-100 text-yellow-700'
       case 'concluido': return 'bg-blue-100 text-blue-700'
+      case 'devolvida': return 'bg-orange-100 text-orange-700'
       default: return 'bg-gray-100 text-gray-700'
     }
+  }
+
+  // Função auxiliar para evitar erros de formatação no JSX
+  const getPriorityColor = (priority: string) => {
+    return (priority === 'alta' || priority === 'critica') ? 'text-red-600' : 'text-blue-600';
   }
 
   return (
@@ -75,6 +80,7 @@ function DashboardContent() {
                         <SelectItem value="todos">Todos os Status</SelectItem>
                         <SelectItem value="aberto">Abertos</SelectItem>
                         <SelectItem value="em_andamento">Em Andamento</SelectItem>
+                        <SelectItem value="devolvida">Devolvidas</SelectItem>
                         <SelectItem value="resolvido">Resolvidos</SelectItem>
                     </SelectContent>
                 </Select>
@@ -129,9 +135,7 @@ function DashboardContent() {
                                     </span>
                                 </td>
                                 <td className="px-6 py-4">
-                                    <span className={`text-xs font-bold uppercase ${
-                                        ticket.priority === 'alta' || ticket.priority === 'critica' ? 'text-red-600' : 'text-blue-600'
-                                    }`}>
+                                    <span className={`text-xs font-bold uppercase ${getPriorityColor(ticket.priority)}`}>
                                         {ticket.priority}
                                     </span>
                                 </td>
@@ -140,7 +144,7 @@ function DashboardContent() {
                                 </td>
                                 <td className="px-6 py-4">
                                     <span className={`text-xs font-bold px-2 py-1 rounded-full uppercase ${getStatusColor(ticket.status)}`}>
-                                        {ticket.status.replace('_', ' ')}
+                                        {ticket.status ? ticket.status.replace('_', ' ') : '-'}
                                     </span>
                                 </td>
                             </tr>
