@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, UploadCloud, FileText, ArrowLeft, CheckCircle, Clock, XCircle } from "lucide-react"
+import { Plus, UploadCloud, FileText, ArrowLeft, CheckCircle, Clock, Undo2, Search, Filter } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -21,14 +21,18 @@ export default function ControleRelatorio() {
   const [registros, setRegistros] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   
+  // ESTADOS DE FILTRO E PESQUISA
+  const [busca, setBusca] = useState("")
+  const [mostrarConcluidos, setMostrarConcluidos] = useState(false)
+
   // Controle das Modais
-  const [openNew, setOpenNew] = useState(false) // Modal de Novo Cadastro
-  const [openDetails, setOpenDetails] = useState(false) // Modal de Detalhes/Edição
-  const [selectedTicket, setSelectedTicket] = useState<any>(null) // Ticket selecionado para ver detalhes
+  const [openNew, setOpenNew] = useState(false)
+  const [openDetails, setOpenDetails] = useState(false)
+  const [selectedTicket, setSelectedTicket] = useState<any>(null)
 
   const [uploading, setUploading] = useState(false)
   
-  // Estados do Formulário de Criação
+  // Estados do Formulário
   const [empresa, setEmpresa] = useState("")
   const [pat, setPat] = useState("")
   const [assunto, setAssunto] = useState("")
@@ -53,7 +57,6 @@ export default function ControleRelatorio() {
     setLoading(false)
   }
 
-  // --- FUNÇÃO DE SALVAR NOVO ---
   async function handleSalvar() {
     if (!empresa || !assunto || !acao) {
         return alert("Preencha Empresa, Assunto e Ação.")
@@ -81,8 +84,8 @@ export default function ControleRelatorio() {
             title: assunto,
             description: descricao,
             category: 'Controle de Relatorio',
-            priority: 'media', 
-            status: 'aberto', // AUTOMÁTICO: Sempre nasce aberto
+            priority: 'media',
+            status: 'aberto',
             user_id: user?.id,
             requester_name: "Controle Interno",
             custom_data: {
@@ -110,7 +113,6 @@ export default function ControleRelatorio() {
     }
   }
 
-  // --- FUNÇÃO DE ATUALIZAR STATUS ---
   async function handleUpdateStatus(newStatus: string) {
     if (!selectedTicket) return
 
@@ -123,10 +125,14 @@ export default function ControleRelatorio() {
 
         if (error) throw error
 
-        // Atualiza a lista localmente e fecha modal
         fetchRegistros()
         setOpenDetails(false)
-        alert(`Status atualizado para: ${newStatus === 'resolvido' ? 'Concluído' : 'Em Andamento'}`)
+        
+        let msg = "Status atualizado!"
+        if (newStatus === 'devolvida') msg = "Solicitação marcada como DEVOLVIDA."
+        if (newStatus === 'resolvido') msg = "Solicitação CONCLUÍDA."
+        
+        alert(msg)
 
     } catch (error: any) {
         alert("Erro ao atualizar: " + error.message)
@@ -139,11 +145,12 @@ export default function ControleRelatorio() {
     setEmpresa(""); setPat(""); setAssunto(""); setDescricao(""); setNumRelatorio(""); setAcao(""); setArquivo(null);
   }
 
-  // Helpers de visual
+  // --- CONFIGURAÇÃO DE CORES E NOMES ---
   const getStatusColor = (st: string) => {
     switch(st) {
         case 'resolvido': return 'bg-green-100 text-green-800 border-green-200';
         case 'andamento': return 'bg-blue-100 text-blue-800 border-blue-200';
+        case 'devolvida': return 'bg-orange-100 text-orange-800 border-orange-200';
         default: return 'bg-yellow-100 text-yellow-800 border-yellow-200';
     }
   }
@@ -152,26 +159,42 @@ export default function ControleRelatorio() {
     switch(st) {
         case 'resolvido': return 'Concluído';
         case 'andamento': return 'Em Andamento';
+        case 'devolvida': return 'Devolvida';
         default: return 'Pendente';
     }
   }
 
   const getAcaoColor = (ac: string) => {
-      return ac === 'Corretiva Imediata' 
-        ? 'bg-red-50 text-red-700 border-red-200' 
-        : 'bg-blue-50 text-blue-700 border-blue-200';
+      // Se for Corretiva Imediata OU Mau uso, fica Vermelho
+      if (ac === 'Corretiva Imediata' || ac === 'Mau uso - A faturar') {
+          return 'bg-red-50 text-red-700 border-red-200';
+      }
+      return 'bg-blue-50 text-blue-700 border-blue-200';
   }
 
-  // Abre os detalhes ao clicar na linha
   const handleRowClick = (item: any) => {
       setSelectedTicket(item)
       setOpenDetails(true)
   }
 
+  // --- LÓGICA DE FILTRAGEM ---
+  const registrosFiltrados = registros.filter((item) => {
+    const termo = busca.toLowerCase()
+    const matchPat = item.custom_data?.pat?.toLowerCase().includes(termo) || false
+    const matchEmpresa = item.custom_data?.empresa?.toLowerCase().includes(termo) || false
+    const matchBusca = termo === "" || matchPat || matchEmpresa
+
+    const isConcluido = item.status === 'resolvido' || item.status === 'concluido'
+    
+    // Se o botão "Mostrar Histórico" estiver DESLIGADO (false), escondemos os concluídos
+    if (!mostrarConcluidos && isConcluido) return false
+    
+    return matchBusca
+  })
+
   return (
     <div className="p-8 space-y-4 bg-gray-50 min-h-screen">
       
-      {/* BOTÃO VOLTAR */}
       <div>
         <Link href="/dashboard">
             <Button variant="ghost" className="pl-0 text-gray-500 hover:text-gray-900 gap-2 mb-2">
@@ -180,13 +203,12 @@ export default function ControleRelatorio() {
         </Link>
       </div>
 
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
             <h1 className="text-2xl font-bold text-blue-900">Controle de Relatório</h1>
             <p className="text-gray-500 text-sm">Gestão interna de preventivas e corretivas.</p>
         </div>
         
-        {/* MODAL DE NOVO CADASTRO */}
         <Dialog open={openNew} onOpenChange={setOpenNew}>
             <DialogTrigger asChild>
                 <Button className="bg-blue-600 hover:bg-blue-700 gap-2">
@@ -229,11 +251,11 @@ export default function ControleRelatorio() {
                             <SelectContent>
                                 <SelectItem value="Prox. Preventiva">Prox. Preventiva</SelectItem>
                                 <SelectItem value="Corretiva Imediata">Corretiva Imediata</SelectItem>
-                                <SelectItem value="Acompanhamento">Acompanhamento</SelectItem>
+                                <SelectItem value="Em andamento">Em andamento</SelectItem> {/* Alterado */}
+                                <SelectItem value="Mau uso - A faturar">Mau uso - A faturar</SelectItem> {/* Adicionado */}
                             </SelectContent>
                         </Select>
                     </div>
-                    {/* STATUS REMOVIDO DAQUI - VAI AUTOMATICO */}
 
                     <div className="border border-dashed border-blue-300 bg-blue-50 p-4 rounded-md">
                         <Label className="flex items-center gap-2 mb-2 text-blue-800">
@@ -248,89 +270,33 @@ export default function ControleRelatorio() {
                 </div>
             </DialogContent>
         </Dialog>
+      </div>
 
-        {/* MODAL DE DETALHES E EDIÇÃO DE STATUS */}
-        <Dialog open={openDetails} onOpenChange={setOpenDetails}>
-            <DialogContent className="sm:max-w-[600px]">
-                <DialogHeader>
-                    <DialogTitle className="text-xl text-blue-900">Detalhes do Relatório #{selectedTicket?.id}</DialogTitle>
-                    <DialogDescription>Gerencie o status e veja os detalhes deste registro.</DialogDescription>
-                </DialogHeader>
-                
-                {selectedTicket && (
-                    <div className="space-y-6 py-2">
-                        {/* Cabeçalho do Ticket */}
-                        <div className="bg-gray-50 p-4 rounded-md border grid grid-cols-2 gap-4">
-                            <div>
-                                <p className="text-xs text-gray-500 font-bold uppercase">Empresa</p>
-                                <p className="font-medium">{selectedTicket.custom_data?.empresa}</p>
-                            </div>
-                            <div>
-                                <p className="text-xs text-gray-500 font-bold uppercase">Patrimônio</p>
-                                <p className="font-medium">{selectedTicket.custom_data?.pat || '-'}</p>
-                            </div>
-                            <div>
-                                <p className="text-xs text-gray-500 font-bold uppercase">Nº Relatório</p>
-                                <p className="font-medium">{selectedTicket.custom_data?.num_relatorio || '-'}</p>
-                            </div>
-                            <div>
-                                <p className="text-xs text-gray-500 font-bold uppercase">Data</p>
-                                <p className="font-medium">{new Date(selectedTicket.created_at).toLocaleDateString('pt-BR')}</p>
-                            </div>
-                        </div>
-
-                        {/* Corpo do Ticket */}
-                        <div className="space-y-3">
-                            <div>
-                                <h3 className="font-bold text-gray-900 text-lg">{selectedTicket.title}</h3>
-                                <span className={`inline-block px-2 py-1 rounded text-xs font-bold border mt-1 ${getAcaoColor(selectedTicket.custom_data?.acao)}`}>
-                                    {selectedTicket.custom_data?.acao}
-                                </span>
-                            </div>
-                            <div className="bg-white border p-3 rounded text-sm text-gray-700 whitespace-pre-wrap max-h-40 overflow-y-auto">
-                                {selectedTicket.description}
-                            </div>
-                        </div>
-
-                        {/* Anexo */}
-                        {selectedTicket.custom_data?.url_arquivo_anexo && (
-                            <a href={selectedTicket.custom_data.url_arquivo_anexo} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-blue-600 hover:underline bg-blue-50 p-2 rounded border border-blue-100">
-                                <FileText className="w-4 h-4"/> 
-                                Ver Documento Anexado ({selectedTicket.custom_data?.nome_arquivo || 'Arquivo'})
-                            </a>
-                        )}
-
-                        {/* Ações de Status */}
-                        <div className="border-t pt-4">
-                            <Label className="mb-3 block text-gray-500 text-xs uppercase font-bold">Alterar Status</Label>
-                            <div className="flex gap-2">
-                                <Button 
-                                    variant="outline" 
-                                    className={`flex-1 gap-2 ${selectedTicket.status === 'andamento' ? 'bg-blue-100 border-blue-500' : ''}`}
-                                    onClick={() => handleUpdateStatus('andamento')}
-                                >
-                                    <Clock className="w-4 h-4 text-blue-600"/> Em Andamento
-                                </Button>
-                                <Button 
-                                    variant="outline" 
-                                    className={`flex-1 gap-2 ${selectedTicket.status === 'resolvido' ? 'bg-green-100 border-green-500' : ''}`}
-                                    onClick={() => handleUpdateStatus('resolvido')}
-                                >
-                                    <CheckCircle className="w-4 h-4 text-green-600"/> Concluir
-                                </Button>
-                            </div>
-                            {selectedTicket.status !== 'aberto' && (
-                                <div className="mt-2 text-center">
-                                    <Button variant="link" size="sm" className="text-xs text-gray-400" onClick={() => handleUpdateStatus('aberto')}>
-                                        Reabrir (Voltar para Pendente)
-                                    </Button>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                )}
-            </DialogContent>
-        </Dialog>
+      {/* --- BARRA DE PESQUISA E FILTRO --- */}
+      <div className="bg-white p-4 rounded-lg shadow-sm border flex flex-col md:flex-row gap-4 items-center justify-between">
+         <div className="relative w-full md:w-1/2">
+             <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+             <Input 
+                placeholder="Pesquisar por PAT ou Empresa..." 
+                className="pl-10"
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+             />
+         </div>
+         
+         <div className="flex items-center gap-2">
+            <button 
+                onClick={() => setMostrarConcluidos(!mostrarConcluidos)}
+                className={`flex items-center gap-2 px-4 py-2 rounded text-sm font-medium transition-colors border ${
+                    mostrarConcluidos 
+                    ? "bg-blue-50 border-blue-200 text-blue-700" 
+                    : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
+                }`}
+            >
+                <Filter className="w-4 h-4" />
+                {mostrarConcluidos ? "Ocultar Concluídos" : "Mostrar Histórico (Concluídos)"}
+            </button>
+         </div>
       </div>
 
       <div className="border rounded-lg bg-white shadow-sm overflow-hidden">
@@ -350,10 +316,10 @@ export default function ControleRelatorio() {
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                    {registros.length === 0 && (
-                        <tr><td colSpan={9} className="text-center py-8 text-gray-500">Nenhum relatório encontrado.</td></tr>
+                    {registrosFiltrados.length === 0 && (
+                        <tr><td colSpan={9} className="text-center py-8 text-gray-500">Nenhum relatório encontrado com esses filtros.</td></tr>
                     )}
-                    {registros.map((item: any) => (
+                    {registrosFiltrados.map((item: any) => (
                         <tr 
                             key={item.id} 
                             className="hover:bg-blue-50 cursor-pointer transition-colors"
@@ -397,6 +363,96 @@ export default function ControleRelatorio() {
             </table>
         </div>
       </div>
+
+        {/* MODAL DE DETALHES */}
+        <Dialog open={openDetails} onOpenChange={setOpenDetails}>
+            <DialogContent className="sm:max-w-[600px]">
+                <DialogHeader>
+                    <DialogTitle className="text-xl text-blue-900">Detalhes do Relatório #{selectedTicket?.id}</DialogTitle>
+                    <DialogDescription>Gerencie o status e veja os detalhes.</DialogDescription>
+                </DialogHeader>
+                
+                {selectedTicket && (
+                    <div className="space-y-6 py-2">
+                        <div className="bg-gray-50 p-4 rounded-md border grid grid-cols-2 gap-4">
+                            <div>
+                                <p className="text-xs text-gray-500 font-bold uppercase">Empresa</p>
+                                <p className="font-medium">{selectedTicket.custom_data?.empresa}</p>
+                            </div>
+                            <div>
+                                <p className="text-xs text-gray-500 font-bold uppercase">Patrimônio</p>
+                                <p className="font-medium">{selectedTicket.custom_data?.pat || '-'}</p>
+                            </div>
+                            <div>
+                                <p className="text-xs text-gray-500 font-bold uppercase">Nº Relatório</p>
+                                <p className="font-medium">{selectedTicket.custom_data?.num_relatorio || '-'}</p>
+                            </div>
+                            <div>
+                                <p className="text-xs text-gray-500 font-bold uppercase">Data</p>
+                                <p className="font-medium">{new Date(selectedTicket.created_at).toLocaleDateString('pt-BR')}</p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-3">
+                            <div>
+                                <h3 className="font-bold text-gray-900 text-lg">{selectedTicket.title}</h3>
+                                <span className={`inline-block px-2 py-1 rounded text-xs font-bold border mt-1 ${getAcaoColor(selectedTicket.custom_data?.acao)}`}>
+                                    {selectedTicket.custom_data?.acao}
+                                </span>
+                            </div>
+                            <div className="bg-white border p-3 rounded text-sm text-gray-700 whitespace-pre-wrap max-h-40 overflow-y-auto">
+                                {selectedTicket.description}
+                            </div>
+                        </div>
+
+                        {selectedTicket.custom_data?.url_arquivo_anexo && (
+                            <a href={selectedTicket.custom_data.url_arquivo_anexo} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-blue-600 hover:underline bg-blue-50 p-2 rounded border border-blue-100">
+                                <FileText className="w-4 h-4"/> 
+                                Ver Documento Anexado ({selectedTicket.custom_data?.nome_arquivo || 'Arquivo'})
+                            </a>
+                        )}
+
+                        <div className="border-t pt-4">
+                            <Label className="mb-3 block text-gray-500 text-xs uppercase font-bold">Ações do Relatório</Label>
+                            
+                            <div className="grid grid-cols-3 gap-2">
+                                <Button 
+                                    variant="outline" 
+                                    className={`text-xs h-auto py-2 flex flex-col gap-1 ${selectedTicket.status === 'andamento' ? 'bg-blue-100 border-blue-500 text-blue-800' : 'hover:bg-blue-50'}`}
+                                    onClick={() => handleUpdateStatus('andamento')}
+                                >
+                                    <Clock className="w-4 h-4"/> Em Andamento
+                                </Button>
+
+                                <Button 
+                                    variant="outline" 
+                                    className={`text-xs h-auto py-2 flex flex-col gap-1 ${selectedTicket.status === 'devolvida' ? 'bg-orange-100 border-orange-500 text-orange-800' : 'hover:bg-orange-50 text-orange-700 border-orange-200'}`}
+                                    onClick={() => handleUpdateStatus('devolvida')}
+                                >
+                                    <Undo2 className="w-4 h-4"/> Devolver
+                                </Button>
+
+                                <Button 
+                                    variant="outline" 
+                                    className={`text-xs h-auto py-2 flex flex-col gap-1 ${selectedTicket.status === 'resolvido' ? 'bg-green-100 border-green-500 text-green-800' : 'hover:bg-green-50 text-green-700 border-green-200'}`}
+                                    onClick={() => handleUpdateStatus('resolvido')}
+                                >
+                                    <CheckCircle className="w-4 h-4"/> Concluir
+                                </Button>
+                            </div>
+
+                            {selectedTicket.status !== 'aberto' && (
+                                <div className="mt-3 text-center">
+                                    <Button variant="link" size="sm" className="text-xs text-gray-400" onClick={() => handleUpdateStatus('aberto')}>
+                                        Voltar para Pendente
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </DialogContent>
+        </Dialog>
     </div>
   )
 }
