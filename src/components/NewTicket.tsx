@@ -60,19 +60,17 @@ export function NewTicket() {
     if (!requesterName) return alert("Por favor, informe o Nome do Solicitante.")
     if (!formData.prioridade) return alert("Por favor, selecione a Prioridade.")
 
-    if ((category === 'Cadastro Fornecedor' || category === 'Cadastro Cliente') && !arquivoParaUpload) {
-        return alert("O Cartão CNPJ é obrigatório para este cadastro.")
+    // Validação de Anexo para novos tipos
+    if ((category === 'Cadastro Fornecedor' || category === 'Cadastro Cliente' || category === 'Solicitação de Pagamento' || category === 'Solicitação de Reembolso') && !arquivoParaUpload) {
+        return alert(`É obrigatório anexar o documento (CNPJ, Boleto ou Comprovante) para ${category}.`)
     }
 
     setLoading(true)
 
     try {
-      // --- CORREÇÃO DO ERRO DE FOREIGN KEY ---
-      // Buscamos a sessão ativa para garantir que temos o ID correto
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
       
       if (sessionError || !session?.user) {
-         // Se a sessão estiver inválida, forçamos o erro para avisar o usuário
          throw new Error("Sessão expirada. Por favor, faça logout e entre novamente.")
       }
       
@@ -108,6 +106,14 @@ export function NewTicket() {
         finalTitle = `Doc: ${formData.tipo_emissao}`
         description = `Solicitação de emissão de: ${formData.tipo_emissao}. \nObs: ${formData.description || '-'}`
       }
+      else if (category === "Solicitação de Pagamento") {
+        finalTitle = `Pagamento: ${formData.beneficiario || 'Diversos'} - R$ ${formData.valor || '0,00'}`
+        description = `Vencimento: ${formData.vencimento} | Obs: ${formData.description || '-'}`
+      }
+      else if (category === "Solicitação de Reembolso") {
+        finalTitle = `Reembolso: R$ ${formData.valor || '0,00'}`
+        description = `Data Despesa: ${formData.data_despesa} | Motivo: ${formData.description || '-'}`
+      }
       else if (category === "Compra" || category === "Cotação") {
         const primeiro = items[0].descricao || "Itens"
         finalTitle = `${category}: ${primeiro} ${items.length > 1 ? `(+${items.length - 1})` : ''}`
@@ -120,7 +126,7 @@ export function NewTicket() {
         priority: formData.prioridade,
         category: category,
         status: 'aberto',
-        user_id: userId, // Usando o ID validado da sessão
+        user_id: userId,
         requester_name: requesterName,
         custom_data: {
           ...formData,
@@ -138,7 +144,6 @@ export function NewTicket() {
 
     } catch (error: any) {
       console.error(error)
-      // Mensagem amigável se for o erro de chave estrangeira
       if (error.message && error.message.includes("foreign key constraint")) {
          alert("Erro de permissão: Seu usuário foi criado recentemente. Por favor, SAIA do sistema (Logout) e entre novamente para validar seu cadastro.")
       } else {
@@ -197,6 +202,29 @@ export function NewTicket() {
                 <Label className="text-base font-bold">Lista de Itens ({category})</Label>
                 {renderItemsTable()}
                 <div className="mt-2"><Label>Obs. Gerais</Label><Textarea onChange={e => updateForm('description', e.target.value)} /></div>
+            </div>
+        )
+      case "Solicitação de Pagamento":
+        return (
+            <div className="grid gap-3 border p-4 rounded-md bg-emerald-50">
+                <h3 className="font-bold text-sm text-emerald-900">Dados do Pagamento</h3>
+                <div className="grid grid-cols-2 gap-3">
+                    <div className="col-span-2"><Label>Beneficiário / Empresa</Label><Input onChange={e => updateForm('beneficiario', e.target.value)} placeholder="Quem vai receber?" /></div>
+                    <div><Label>Valor Total (R$)</Label><Input type="number" step="0.01" onChange={e => updateForm('valor', e.target.value)} placeholder="0,00" /></div>
+                    <div><Label>Data Vencimento</Label><Input type="date" onChange={e => updateForm('vencimento', e.target.value)} /></div>
+                </div>
+                <div><Label>Observações / Dados Bancários</Label><Textarea onChange={e => updateForm('description', e.target.value)} placeholder="PIX, conta ou detalhes..." /></div>
+            </div>
+        )
+      case "Solicitação de Reembolso":
+        return (
+            <div className="grid gap-3 border p-4 rounded-md bg-indigo-50">
+                <h3 className="font-bold text-sm text-indigo-900">Dados do Reembolso</h3>
+                <div className="grid grid-cols-2 gap-3">
+                    <div><Label>Valor a Reembolsar (R$)</Label><Input type="number" step="0.01" onChange={e => updateForm('valor', e.target.value)} placeholder="0,00" /></div>
+                    <div><Label>Data da Despesa</Label><Input type="date" onChange={e => updateForm('data_despesa', e.target.value)} /></div>
+                </div>
+                <div><Label>Motivo / Justificativa</Label><Textarea onChange={e => updateForm('description', e.target.value)} placeholder="Almoço com cliente, Combustível, etc..." /></div>
             </div>
         )
       case "Cadastro Fornecedor":
@@ -287,6 +315,10 @@ export function NewTicket() {
                         <SelectItem value="Nova Locação">Nova Locação</SelectItem>
                         <SelectItem value="Compra">Compra</SelectItem>
                         <SelectItem value="Cotação">Cotação</SelectItem>
+                        {/* NOVOS ITENS */}
+                        <SelectItem value="Solicitação de Pagamento">Solicitação de Pagamento</SelectItem>
+                        <SelectItem value="Solicitação de Reembolso">Solicitação de Reembolso</SelectItem>
+                        
                         <SelectItem value="Cadastro Mercadoria">Cadastro Mercadoria</SelectItem>
                         <SelectItem value="Cadastro Cliente">Cadastro Cliente</SelectItem>
                         <SelectItem value="Cadastro Fornecedor">Cadastro Fornecedor</SelectItem>
@@ -309,7 +341,7 @@ export function NewTicket() {
           {renderFields()}
 
           <div className="border-t pt-4 mt-2 bg-gray-50 p-3 rounded border-dashed border border-gray-300">
-            {/* OBSERVAÇÕES DINÂMICAS ACIMA DO ANEXO */}
+            {/* ALERTAS DE ANEXO OBRIGATÓRIO */}
             {category === "Nova Locação" && (
                 <div className="bg-amber-100 p-2 text-[11px] text-amber-800 rounded mb-2 border border-amber-200 font-bold">
                     ⚠️ Obrigatório: Cartão CNPJ, Dados Cadastrais, Proposta e docs relevantes.
@@ -318,6 +350,16 @@ export function NewTicket() {
             {(category === "Cadastro Cliente" || category === "Cadastro Fornecedor") && (
                 <div className="bg-blue-100 p-2 text-[11px] text-blue-800 rounded mb-2 border border-blue-200 font-bold">
                     ⚠️ Obrigatório anexar o Cartão CNPJ aqui.
+                </div>
+            )}
+            {category === "Solicitação de Pagamento" && (
+                <div className="bg-emerald-100 p-2 text-[11px] text-emerald-800 rounded mb-2 border border-emerald-200 font-bold">
+                    ⚠️ Obrigatório anexar o Boleto ou Nota Fiscal.
+                </div>
+            )}
+            {category === "Solicitação de Reembolso" && (
+                <div className="bg-indigo-100 p-2 text-[11px] text-indigo-800 rounded mb-2 border border-indigo-200 font-bold">
+                    ⚠️ Obrigatório anexar o Comprovante/Recibo.
                 </div>
             )}
             {category === "Emissão de Documento" && (

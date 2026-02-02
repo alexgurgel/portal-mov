@@ -1,6 +1,6 @@
 'use client'
 import Link from "next/link"
-import { useSearchParams, useRouter, usePathname } from "next/navigation" // Adicionei usePathname
+import { useSearchParams, useRouter, usePathname } from "next/navigation"
 import { 
   LayoutDashboard, 
   ShoppingCart, 
@@ -10,14 +10,16 @@ import {
   Truck,
   FileSignature,
   LogOut,
-  ClipboardList // Ícone novo para o relatório
+  ClipboardList,
+  Banknote, // Ícone Pagamento
+  Receipt   // Ícone Reembolso
 } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
-import { useState, useEffect } from "react" // Adicionei hooks para checar o usuário
+import { useState, useEffect } from "react"
 
 export function Sidebar() {
   const searchParams = useSearchParams()
-  const pathname = usePathname() // Para saber em qual página estamos
+  const pathname = usePathname()
   const currentSector = searchParams.get('sector')
   const router = useRouter()
   const [userEmail, setUserEmail] = useState("")
@@ -39,7 +41,6 @@ export function Sidebar() {
   }
 
   // --- CONFIGURAÇÃO DE ACESSO ---
-  // Coloque aqui os e-mails que podem ver a aba "Controle de Relatório"
   const usuariosPermitidos = [
     "alex.batista@grupomov.com.br", 
     "manuela.malagoli@grupomov.com.br",
@@ -53,6 +54,8 @@ export function Sidebar() {
     { name: "Nova Locação", icon: Truck, href: "/dashboard?sector=Nova Locação" },
     { name: "Compra", icon: ShoppingCart, href: "/dashboard?sector=Compra" },
     { name: "Cotação", icon: FileText, href: "/dashboard?sector=Cotação" },
+    { name: "Solicitação Pagamento", icon: Banknote, href: "/dashboard?sector=Solicitação de Pagamento" }, // NOVO
+    { name: "Solicitação Reembolso", icon: Receipt, href: "/dashboard?sector=Solicitação de Reembolso" },   // NOVO
     { name: "Cadastro Mercadoria", icon: Package, href: "/dashboard?sector=Cadastro Mercadoria" },
     { name: "Cadastro Cliente", icon: Users, href: "/dashboard?sector=Cadastro Cliente" },
     { name: "Cadastro Fornecedor", icon: Users, href: "/dashboard?sector=Cadastro Fornecedor" },
@@ -64,7 +67,7 @@ export function Sidebar() {
     menus.push({ 
         name: "Controle de Relatório", 
         icon: ClipboardList, 
-        href: "/controle-relatorio" // Link para a nova página que criamos
+        href: "/controle-relatorio"
     })
   }
 
@@ -77,12 +80,10 @@ export function Sidebar() {
 
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
         {menus.map((item) => {
-            // Lógica para saber se o botão está ativo (Amarelo)
-            // Verifica se é a página exata OU se é um setor do dashboard
             const isActive = 
-                (item.href === "/dashboard" && pathname === "/dashboard" && !currentSector) || // Visão Geral
-                (item.href === `/dashboard?sector=${currentSector}`) || // Setores
-                (item.href === pathname && pathname === "/controle-relatorio") // Nova página separada
+                (item.href === "/dashboard" && pathname === "/dashboard" && !currentSector) || 
+                (item.href === `/dashboard?sector=${currentSector}`) || 
+                (item.href === pathname && pathname === "/controle-relatorio")
 
             return (
                 <Link 
