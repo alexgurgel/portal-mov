@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from "react"
+import { useSearchParams } from "next/navigation" // 1. IMPORTADO PARA LER A URL
 import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -22,6 +23,7 @@ import {
 import { Trash2, Plus, UploadCloud } from "lucide-react"
 
 export function NewTicket() {
+  const searchParams = useSearchParams() // 2. HOOK PARA LER O SETOR ATUAL
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   
@@ -34,13 +36,27 @@ export function NewTicket() {
   ])
   const [arquivoParaUpload, setArquivoParaUpload] = useState<File | null>(null)
 
+  // 3. EFEITO INTELIGENTE: Roda quando abre a janela ou muda a URL
   useEffect(() => {
-    setFormData({ prioridade: 'media' })
-    setItems([{ codigo: '', descricao: '', qtd: 1, pat: '', aplicacao: '' }])
-    setTitle("")
-    setRequesterName("")
-    setArquivoParaUpload(null)
-  }, [category, open])
+    if (open) {
+        // Pega o setor da URL (ex: ?sector=Compra)
+        const setorAtual = searchParams.get('sector')
+        
+        // Se existir um setor válido na URL, usa ele. Se não, usa "Geral"
+        if (setorAtual) {
+            setCategory(setorAtual)
+        } else {
+            setCategory("Geral")
+        }
+
+        // Reseta os campos para não vir com lixo de outra solicitação
+        setFormData({ prioridade: 'media' })
+        setItems([{ codigo: '', descricao: '', qtd: 1, pat: '', aplicacao: '' }])
+        setTitle("")
+        setRequesterName("")
+        setArquivoParaUpload(null)
+    }
+  }, [open, searchParams]) 
 
   const updateForm = (field: string, value: any) => {
     setFormData((prev: any) => ({ ...prev, [field]: value }))
@@ -308,7 +324,7 @@ export function NewTicket() {
           <div className="grid grid-cols-2 gap-4">
             <div>
                 <Label>Tipo de Solicitação</Label>
-                <Select onValueChange={setCategory} defaultValue="Geral">
+                <Select value={category} onValueChange={setCategory}>
                     <SelectTrigger className="border-gray-400 font-bold"><SelectValue placeholder="..." /></SelectTrigger>
                     <SelectContent>
                         <SelectItem value="Geral">Geral</SelectItem>

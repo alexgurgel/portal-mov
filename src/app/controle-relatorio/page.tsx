@@ -165,8 +165,8 @@ export default function ControleRelatorio() {
   }
 
   const getAcaoColor = (ac: string) => {
-      // Se for Corretiva Imediata OU Mau uso, fica Vermelho
-      if (ac === 'Corretiva Imediata' || ac === 'Mau uso - A faturar') {
+      // Deixei Vermelho: Corretiva, Mau uso e A Faturar
+      if (ac === 'Corretiva Imediata' || ac === 'Mau uso' || ac === 'A Faturar') {
           return 'bg-red-50 text-red-700 border-red-200';
       }
       return 'bg-blue-50 text-blue-700 border-blue-200';
@@ -251,8 +251,9 @@ export default function ControleRelatorio() {
                             <SelectContent>
                                 <SelectItem value="Prox. Preventiva">Prox. Preventiva</SelectItem>
                                 <SelectItem value="Corretiva Imediata">Corretiva Imediata</SelectItem>
-                                <SelectItem value="Em andamento">Em andamento</SelectItem> {/* Alterado */}
-                                <SelectItem value="Mau uso - A faturar">Mau uso - A faturar</SelectItem> {/* Adicionado */}
+                                <SelectItem value="Em andamento">Em andamento</SelectItem>
+                                <SelectItem value="Mau uso">Mau uso</SelectItem> {/* Opção separada 1 */}
+                                <SelectItem value="A Faturar">A Faturar</SelectItem> {/* Opção separada 2 */}
                             </SelectContent>
                         </Select>
                     </div>
