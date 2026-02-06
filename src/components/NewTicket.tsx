@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Trash2, Plus, UploadCloud } from "lucide-react"
+import { Trash2, Plus, UploadCloud, X } from "lucide-react"
 
 export function NewTicket() {
   const searchParams = useSearchParams()
@@ -34,10 +34,32 @@ export function NewTicket() {
   const [items, setItems] = useState([
     { codigo: '', descricao: '', qtd: 1, pat: '', aplicacao: '' }
   ])
-  const [arquivoParaUpload, setArquivoParaUpload] = useState<File | null>(null)
+  
+  const [arquivosParaUpload, setArquivosParaUpload] = useState<File[]>([])
 
+  // --- BUSCAR USUÁRIO E FORMATAR O NOME BONITO ---
   useEffect(() => {
+    async function fetchUser() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        // Pega o nome do cadastro OU a parte antes do @ do e-mail
+        const nomeSalvo = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0]
+        
+        if (nomeSalvo) {
+            // Lógica de Formatação:
+            // 1. .replace(/[._]/g, ' ') -> Troca pontos e underlines por espaço
+            // 2. .replace(/\b\w/g, l => l.toUpperCase()) -> Põe cada primeira letra maiúscula
+            const nomeFormatado = nomeSalvo
+                .replace(/[._]/g, ' ') 
+                .replace(/\b\w/g, (l: string) => l.toUpperCase())
+            
+            setRequesterName(nomeFormatado)
+        }
+      }
+    }
+
     if (open) {
+        fetchUser()
         const setorAtual = searchParams.get('sector')
         if (setorAtual) {
             setCategory(setorAtual)
@@ -48,8 +70,7 @@ export function NewTicket() {
         setFormData({ prioridade: 'media' })
         setItems([{ codigo: '', descricao: '', qtd: 1, pat: '', aplicacao: '' }])
         setTitle("")
-        setRequesterName("")
-        setArquivoParaUpload(null)
+        setArquivosParaUpload([]) 
     }
   }, [open, searchParams]) 
 
@@ -66,21 +87,31 @@ export function NewTicket() {
   const addItem = () => setItems([...items, { codigo: '', descricao: '', qtd: 1, pat: '', aplicacao: '' }])
   const removeItem = (index: number) => setItems(items.filter((_, i) => i !== index))
 
-  // --- FUNÇÃO PARA LIMPAR NOME DO ARQUIVO (REMOVE ACENTOS E ESPAÇOS) ---
   const sanitizeFileName = (name: string) => {
     return name
-      .normalize("NFD") // Separa acentos das letras
-      .replace(/[\u0300-\u036f]/g, "") // Remove acentos
-      .replace(/\s+/g, '_') // Troca espaços por underline
-      .replace(/[^a-zA-Z0-9._-]/g, '') // Remove caracteres especiais
+      .normalize("NFD") 
+      .replace(/[\u0300-\u036f]/g, "") 
+      .replace(/\s+/g, '_') 
+      .replace(/[^a-zA-Z0-9._-]/g, '') 
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files && e.target.files.length > 0) {
+          setArquivosParaUpload(prev => [...prev, ...Array.from(e.target.files!)])
+      }
+  }
+
+  const removeFile = (index: number) => {
+      setArquivosParaUpload(prev => prev.filter((_, i) => i !== index))
   }
 
   async function handleSubmit() {
     if (!requesterName) return alert("Por favor, informe o Nome do Solicitante.")
     if (!formData.prioridade) return alert("Por favor, selecione a Prioridade.")
 
-    if ((category === 'Cadastro Fornecedor' || category === 'Cadastro Cliente' || category === 'Solicitação de Pagamento' || category === 'Solicitação de Reembolso') && !arquivoParaUpload) {
-        return alert(`É obrigatório anexar o documento (CNPJ, Boleto ou Comprovante) para ${category}.`)
+    const categoriasObrigatorias = ['Cadastro Fornecedor', 'Cadastro Cliente', 'Solicitação de Pagamento', 'Solicitação de Reembolso']
+    if (categoriasObrigatorias.includes(category) && arquivosParaUpload.length === 0) {
+        return alert(`É obrigatório anexar pelo menos um documento para ${category}.`)
     }
 
     setLoading(true)
@@ -94,20 +125,23 @@ export function NewTicket() {
       
       const userId = session.user.id
 
-      let urlArquivo = "", nomeArquivo = ""
-      
-      if (arquivoParaUpload) {
-        // AQUI ESTÁ A CORREÇÃO DO NOME
-        nomeArquivo = arquivoParaUpload.name
-        const nomeLimpo = sanitizeFileName(nomeArquivo)
-        const nomeArquivoUnico = `${Date.now()}-${nomeLimpo}`
+      const listaAnexosSalvos = []
 
-        const { error: errorUpload } = await supabase.storage.from('anexos').upload(nomeArquivoUnico, arquivoParaUpload)
-        
-        if (errorUpload) throw new Error("Erro upload: " + errorUpload.message)
-        
-        const { data: dataUrl } = supabase.storage.from('anexos').getPublicUrl(nomeArquivoUnico)
-        urlArquivo = dataUrl.publicUrl
+      if (arquivosParaUpload.length > 0) {
+          for (const arquivo of arquivosParaUpload) {
+              const nomeLimpo = sanitizeFileName(arquivo.name)
+              const nomeArquivoUnico = `${Date.now()}-${nomeLimpo}`
+              
+              const { error: errorUpload } = await supabase.storage.from('anexos').upload(nomeArquivoUnico, arquivo)
+              if (errorUpload) throw new Error(`Erro ao enviar ${arquivo.name}: ` + errorUpload.message)
+              
+              const { data: dataUrl } = supabase.storage.from('anexos').getPublicUrl(nomeArquivoUnico)
+              
+              listaAnexosSalvos.push({
+                  nome: nomeLimpo,
+                  url: dataUrl.publicUrl
+              })
+          }
       }
 
       let finalTitle = title
@@ -122,7 +156,7 @@ export function NewTicket() {
       }
       else if (category === "Cadastro Mercadoria") {
         finalTitle = `Cadastro Item: ${formData.descricao_item}`
-        description = `Cód: ${formData.codigo} | Medidas: ${formData.medidas} | Aplicação: ${formData.aplicacao} | Alocação: ${formData.alocacao}`
+        description = `Cód: ${formData.codigo} | NCM: ${formData.ncm} | Valor: R$ ${formData.valor_item}`
       }
       else if (category === "Emissão de Documento") {
         finalTitle = `Doc: ${formData.tipo_emissao}`
@@ -152,8 +186,9 @@ export function NewTicket() {
         custom_data: {
           ...formData,
           itens_tabela: items,
-          nome_arquivo_anexo: nomeArquivo,
-          url_arquivo_anexo: urlArquivo
+          anexos: listaAnexosSalvos,
+          nome_arquivo_anexo: listaAnexosSalvos[0]?.nome || "",
+          url_arquivo_anexo: listaAnexosSalvos[0]?.url || ""
         },
       })
 
@@ -273,6 +308,13 @@ export function NewTicket() {
                     <div className="col-span-1"><Label>Código</Label><Input onChange={e => updateForm('codigo', e.target.value)} /></div>
                     <div className="col-span-2"><Label>Descrição (Catálogo)</Label><Input onChange={e => updateForm('descricao_item', e.target.value)} /></div>
                 </div>
+                
+                {/* --- NOVOS CAMPOS: NCM e Valor --- */}
+                <div className="grid grid-cols-2 gap-2">
+                    <div><Label>NCM</Label><Input onChange={e => updateForm('ncm', e.target.value)} placeholder="0000.00.00" /></div>
+                    <div><Label>Valor do Item (R$)</Label><Input type="number" step="0.01" onChange={e => updateForm('valor_item', e.target.value)} placeholder="0,00" /></div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-2">
                     <div><Label>Medidas</Label><Input onChange={e => updateForm('medidas', e.target.value)} /></div>
                     <div><Label>Aplicação</Label><Input onChange={e => updateForm('aplicacao', e.target.value)} /></div>
@@ -323,7 +365,14 @@ export function NewTicket() {
         <div className="grid gap-4 py-4">
           <div className="bg-slate-100 p-3 rounded border">
             <Label className="font-bold text-gray-700">Nome do Solicitante *</Label>
-            <Input value={requesterName} onChange={e => setRequesterName(e.target.value)} placeholder="Informe seu nome ou setor" className="bg-white mt-1" required />
+            
+            <Input 
+                value={requesterName} 
+                onChange={e => setRequesterName(e.target.value)} 
+                placeholder="Carregando..." 
+                className="bg-white mt-1" 
+                required 
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -336,10 +385,8 @@ export function NewTicket() {
                         <SelectItem value="Nova Locação">Nova Locação</SelectItem>
                         <SelectItem value="Compra">Compra</SelectItem>
                         <SelectItem value="Cotação">Cotação</SelectItem>
-                        {/* NOVOS ITENS */}
                         <SelectItem value="Solicitação de Pagamento">Solicitação de Pagamento</SelectItem>
                         <SelectItem value="Solicitação de Reembolso">Solicitação de Reembolso</SelectItem>
-                        
                         <SelectItem value="Cadastro Mercadoria">Cadastro Mercadoria</SelectItem>
                         <SelectItem value="Cadastro Cliente">Cadastro Cliente</SelectItem>
                         <SelectItem value="Cadastro Fornecedor">Cadastro Fornecedor</SelectItem>
@@ -362,35 +409,30 @@ export function NewTicket() {
           {renderFields()}
 
           <div className="border-t pt-4 mt-2 bg-gray-50 p-3 rounded border-dashed border border-gray-300">
-            {/* ALERTAS DE ANEXO OBRIGATÓRIO */}
-            {category === "Nova Locação" && (
-                <div className="bg-amber-100 p-2 text-[11px] text-amber-800 rounded mb-2 border border-amber-200 font-bold">
-                    ⚠️ Obrigatório: Cartão CNPJ, Dados Cadastrais, Proposta e docs relevantes.
-                </div>
-            )}
-            {(category === "Cadastro Cliente" || category === "Cadastro Fornecedor") && (
-                <div className="bg-blue-100 p-2 text-[11px] text-blue-800 rounded mb-2 border border-blue-200 font-bold">
-                    ⚠️ Obrigatório anexar o Cartão CNPJ aqui.
-                </div>
-            )}
-            {category === "Solicitação de Pagamento" && (
-                <div className="bg-emerald-100 p-2 text-[11px] text-emerald-800 rounded mb-2 border border-emerald-200 font-bold">
-                    ⚠️ Obrigatório anexar o Boleto ou Nota Fiscal.
-                </div>
-            )}
-            {category === "Solicitação de Reembolso" && (
-                <div className="bg-indigo-100 p-2 text-[11px] text-indigo-800 rounded mb-2 border border-indigo-200 font-bold">
-                    ⚠️ Obrigatório anexar o Comprovante/Recibo.
-                </div>
-            )}
-            {category === "Emissão de Documento" && (
-                <div className="bg-green-100 p-2 text-[11px] text-green-800 rounded mb-2 border border-green-200 font-bold">
-                    ⚠️ Obrigatório anexar a OV.
-                </div>
-            )}
+            {category === "Nova Locação" && <div className="bg-amber-100 p-2 text-[11px] text-amber-800 rounded mb-2 border border-amber-200 font-bold">⚠️ Obrigatório: Cartão CNPJ, Dados Cadastrais, Proposta e docs relevantes.</div>}
+            {(category === "Cadastro Cliente" || category === "Cadastro Fornecedor") && <div className="bg-blue-100 p-2 text-[11px] text-blue-800 rounded mb-2 border border-blue-200 font-bold">⚠️ Obrigatório anexar o Cartão CNPJ aqui.</div>}
+            {category === "Solicitação de Pagamento" && <div className="bg-emerald-100 p-2 text-[11px] text-emerald-800 rounded mb-2 border border-emerald-200 font-bold">⚠️ Obrigatório anexar o Boleto ou Nota Fiscal.</div>}
+            {category === "Solicitação de Reembolso" && <div className="bg-indigo-100 p-2 text-[11px] text-indigo-800 rounded mb-2 border border-indigo-200 font-bold">⚠️ Obrigatório anexar o Comprovante/Recibo.</div>}
+            {category === "Emissão de Documento" && <div className="bg-green-100 p-2 text-[11px] text-green-800 rounded mb-2 border border-green-200 font-bold">⚠️ Obrigatório anexar a OV.</div>}
 
-            <Label className="mb-2 block font-semibold flex items-center gap-2"><UploadCloud size={16}/> Anexar Arquivo</Label>
-            <Input type="file" className="cursor-pointer bg-white" onChange={(e) => { const file = e.target.files?.[0]; if (file) setArquivoParaUpload(file); }} />
+            <Label className="mb-2 block font-semibold flex items-center gap-2"><UploadCloud size={16}/> Anexar Arquivos</Label>
+            
+            <div className="flex gap-2 mb-3">
+                <Input type="file" multiple className="cursor-pointer bg-white" onChange={handleFileChange} />
+            </div>
+
+            {arquivosParaUpload.length > 0 && (
+                <div className="space-y-2">
+                    {arquivosParaUpload.map((file, idx) => (
+                        <div key={idx} className="flex justify-between items-center bg-white p-2 rounded border text-sm">
+                            <span className="truncate max-w-[250px]">{file.name}</span>
+                            <Button variant="ghost" size="sm" onClick={() => removeFile(idx)} className="h-6 w-6 text-red-500 p-0">
+                                <X size={14}/>
+                            </Button>
+                        </div>
+                    ))}
+                </div>
+            )}
           </div>
         </div>
 
