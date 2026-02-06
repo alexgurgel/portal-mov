@@ -57,6 +57,15 @@ export default function ControleRelatorio() {
     setLoading(false)
   }
 
+  // --- FUNÇÃO PARA LIMPAR NOME DO ARQUIVO ---
+  const sanitizeFileName = (name: string) => {
+    return name
+      .normalize("NFD") 
+      .replace(/[\u0300-\u036f]/g, "") 
+      .replace(/\s+/g, '_') 
+      .replace(/[^a-zA-Z0-9._-]/g, '') 
+  }
+
   async function handleSalvar() {
     if (!empresa || !assunto || !acao) {
         return alert("Preencha Empresa, Assunto e Ação.")
@@ -72,7 +81,10 @@ export default function ControleRelatorio() {
 
         if (arquivo) {
             nomeArquivo = arquivo.name
-            const nomeUnico = `${Date.now()}-${nomeArquivo}`
+            // APLICA A LIMPEZA DE NOME
+            const nomeLimpo = sanitizeFileName(nomeArquivo)
+            const nomeUnico = `${Date.now()}-${nomeLimpo}`
+            
             const { error: uploadError } = await supabase.storage.from('anexos').upload(nomeUnico, arquivo)
             if (uploadError) throw new Error("Erro no upload: " + uploadError.message)
             

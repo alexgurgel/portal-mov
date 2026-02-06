@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from "react"
-import { useSearchParams } from "next/navigation" // 1. IMPORTADO PARA LER A URL
+import { useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -23,7 +23,7 @@ import {
 import { Trash2, Plus, UploadCloud } from "lucide-react"
 
 export function NewTicket() {
-  const searchParams = useSearchParams() // 2. HOOK PARA LER O SETOR ATUAL
+  const searchParams = useSearchParams()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   
@@ -36,20 +36,15 @@ export function NewTicket() {
   ])
   const [arquivoParaUpload, setArquivoParaUpload] = useState<File | null>(null)
 
-  // 3. EFEITO INTELIGENTE: Roda quando abre a janela ou muda a URL
   useEffect(() => {
     if (open) {
-        // Pega o setor da URL (ex: ?sector=Compra)
         const setorAtual = searchParams.get('sector')
-        
-        // Se existir um setor válido na URL, usa ele. Se não, usa "Geral"
         if (setorAtual) {
             setCategory(setorAtual)
         } else {
             setCategory("Geral")
         }
 
-        // Reseta os campos para não vir com lixo de outra solicitação
         setFormData({ prioridade: 'media' })
         setItems([{ codigo: '', descricao: '', qtd: 1, pat: '', aplicacao: '' }])
         setTitle("")
@@ -71,12 +66,19 @@ export function NewTicket() {
   const addItem = () => setItems([...items, { codigo: '', descricao: '', qtd: 1, pat: '', aplicacao: '' }])
   const removeItem = (index: number) => setItems(items.filter((_, i) => i !== index))
 
+  // --- FUNÇÃO PARA LIMPAR NOME DO ARQUIVO (REMOVE ACENTOS E ESPAÇOS) ---
+  const sanitizeFileName = (name: string) => {
+    return name
+      .normalize("NFD") // Separa acentos das letras
+      .replace(/[\u0300-\u036f]/g, "") // Remove acentos
+      .replace(/\s+/g, '_') // Troca espaços por underline
+      .replace(/[^a-zA-Z0-9._-]/g, '') // Remove caracteres especiais
+  }
+
   async function handleSubmit() {
-    // 1. Validações
     if (!requesterName) return alert("Por favor, informe o Nome do Solicitante.")
     if (!formData.prioridade) return alert("Por favor, selecione a Prioridade.")
 
-    // Validação de Anexo para novos tipos
     if ((category === 'Cadastro Fornecedor' || category === 'Cadastro Cliente' || category === 'Solicitação de Pagamento' || category === 'Solicitação de Reembolso') && !arquivoParaUpload) {
         return alert(`É obrigatório anexar o documento (CNPJ, Boleto ou Comprovante) para ${category}.`)
     }
@@ -92,18 +94,22 @@ export function NewTicket() {
       
       const userId = session.user.id
 
-      // 2. Upload de Arquivo
       let urlArquivo = "", nomeArquivo = ""
+      
       if (arquivoParaUpload) {
+        // AQUI ESTÁ A CORREÇÃO DO NOME
         nomeArquivo = arquivoParaUpload.name
-        const nomeArquivoUnico = `${Date.now()}-${nomeArquivo}`
+        const nomeLimpo = sanitizeFileName(nomeArquivo)
+        const nomeArquivoUnico = `${Date.now()}-${nomeLimpo}`
+
         const { error: errorUpload } = await supabase.storage.from('anexos').upload(nomeArquivoUnico, arquivoParaUpload)
+        
         if (errorUpload) throw new Error("Erro upload: " + errorUpload.message)
+        
         const { data: dataUrl } = supabase.storage.from('anexos').getPublicUrl(nomeArquivoUnico)
         urlArquivo = dataUrl.publicUrl
       }
 
-      // 3. Preparar Títulos e Descrições
       let finalTitle = title
       let description = formData.description || ""
 
@@ -135,7 +141,6 @@ export function NewTicket() {
         finalTitle = `${category}: ${primeiro} ${items.length > 1 ? `(+${items.length - 1})` : ''}`
       }
 
-      // 4. Inserção no Banco
       const { error } = await supabase.from('tickets').insert({
         title: finalTitle || category,
         description: description,
