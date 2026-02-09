@@ -37,18 +37,12 @@ export function NewTicket() {
   
   const [arquivosParaUpload, setArquivosParaUpload] = useState<File[]>([])
 
-  // --- BUSCAR USUÁRIO E FORMATAR O NOME BONITO ---
   useEffect(() => {
     async function fetchUser() {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
-        // Pega o nome do cadastro OU a parte antes do @ do e-mail
         const nomeSalvo = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0]
-        
         if (nomeSalvo) {
-            // Lógica de Formatação:
-            // 1. .replace(/[._]/g, ' ') -> Troca pontos e underlines por espaço
-            // 2. .replace(/\b\w/g, l => l.toUpperCase()) -> Põe cada primeira letra maiúscula
             const nomeFormatado = nomeSalvo
                 .replace(/[._]/g, ' ') 
                 .replace(/\b\w/g, (l: string) => l.toUpperCase())
@@ -109,7 +103,7 @@ export function NewTicket() {
     if (!requesterName) return alert("Por favor, informe o Nome do Solicitante.")
     if (!formData.prioridade) return alert("Por favor, selecione a Prioridade.")
 
-    const categoriasObrigatorias = ['Cadastro Fornecedor', 'Cadastro Cliente', 'Solicitação de Pagamento', 'Solicitação de Reembolso']
+    const categoriasObrigatorias = ['Cadastro Fornecedor', 'Cadastro Cliente', 'Solicitação de Pagamento', 'Solicitação de Reembolso', 'Divergência']
     if (categoriasObrigatorias.includes(category) && arquivosParaUpload.length === 0) {
         return alert(`É obrigatório anexar pelo menos um documento para ${category}.`)
     }
@@ -169,6 +163,10 @@ export function NewTicket() {
       else if (category === "Solicitação de Reembolso") {
         finalTitle = `Reembolso: R$ ${formData.valor || '0,00'}`
         description = `Data Despesa: ${formData.data_despesa} | Motivo: ${formData.description || '-'}`
+      }
+      else if (category === "Divergência") {
+        finalTitle = `Divergência: ${formData.motivo_divergencia || 'Geral'}`
+        description = `Fornecedor: ${formData.cnpj_fornecedor} | NF: ${formData.numero_nf} | Pedido: ${formData.pedido_compra} | Detalhes: ${formData.description || '-'}`
       }
       else if (category === "Compra" || category === "Cotação") {
         const primeiro = items[0].descricao || "Itens"
@@ -283,6 +281,42 @@ export function NewTicket() {
                 <div><Label>Motivo / Justificativa</Label><Textarea onChange={e => updateForm('description', e.target.value)} placeholder="Almoço com cliente, Combustível, etc..." /></div>
             </div>
         )
+      case "Divergência":
+        return (
+            <div className="grid gap-3 border p-4 rounded-md bg-orange-50">
+                <h3 className="font-bold text-sm text-orange-900">Recebimento / Devolução</h3>
+                <div className="grid grid-cols-2 gap-3">
+                    <div className="col-span-2"><Label>CNPJ Fornecedor</Label><Input onChange={e => updateForm('cnpj_fornecedor', e.target.value)} /></div>
+                    <div><Label>Nº Nota Fiscal</Label><Input onChange={e => updateForm('numero_nf', e.target.value)} /></div>
+                    <div><Label>Nº Pedido Compra</Label><Input onChange={e => updateForm('pedido_compra', e.target.value)} /></div>
+                </div>
+                
+                <div className="mt-2">
+                    <Label className="mb-1 block">Motivo</Label>
+                    <Select onValueChange={val => updateForm('motivo_divergencia', val)}>
+                        <SelectTrigger className="bg-white"><SelectValue placeholder="Selecione o motivo..." /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="S/ Pedido Compra">S/ Pedido Compra</SelectItem>
+                            <SelectItem value="Itens c/ diverg. Fisica">Itens c/ diverg. Física</SelectItem>
+                            <SelectItem value="CNPJ Incorreto">CNPJ Incorreto</SelectItem>
+                            <SelectItem value="NF Incompleta">NF Incompleta</SelectItem>
+                            <SelectItem value="S/ NF">S/ NF</SelectItem>
+                            <SelectItem value="Falha Mecanica">Falha Mecânica</SelectItem>
+                            <SelectItem value="Outros">Outros</SelectItem>
+                            <SelectItem value="Devolucao">Devolução</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                <div>
+                    <Label>Detalhamento do Motivo</Label>
+                    <Textarea 
+                        placeholder="Explique melhor a situação..." 
+                        onChange={e => updateForm('description', e.target.value)} 
+                    />
+                </div>
+            </div>
+        )
       case "Cadastro Fornecedor":
       case "Cadastro Cliente":
         return (
@@ -309,7 +343,6 @@ export function NewTicket() {
                     <div className="col-span-2"><Label>Descrição (Catálogo)</Label><Input onChange={e => updateForm('descricao_item', e.target.value)} /></div>
                 </div>
                 
-                {/* --- NOVOS CAMPOS: NCM e Valor --- */}
                 <div className="grid grid-cols-2 gap-2">
                     <div><Label>NCM</Label><Input onChange={e => updateForm('ncm', e.target.value)} placeholder="0000.00.00" /></div>
                     <div><Label>Valor do Item (R$)</Label><Input type="number" step="0.01" onChange={e => updateForm('valor_item', e.target.value)} placeholder="0,00" /></div>
@@ -387,6 +420,9 @@ export function NewTicket() {
                         <SelectItem value="Cotação">Cotação</SelectItem>
                         <SelectItem value="Solicitação de Pagamento">Solicitação de Pagamento</SelectItem>
                         <SelectItem value="Solicitação de Reembolso">Solicitação de Reembolso</SelectItem>
+                        {/* NOVO ITEM */}
+                        <SelectItem value="Divergência">Divergência / Devolução</SelectItem>
+                        
                         <SelectItem value="Cadastro Mercadoria">Cadastro Mercadoria</SelectItem>
                         <SelectItem value="Cadastro Cliente">Cadastro Cliente</SelectItem>
                         <SelectItem value="Cadastro Fornecedor">Cadastro Fornecedor</SelectItem>
@@ -414,6 +450,8 @@ export function NewTicket() {
             {category === "Solicitação de Pagamento" && <div className="bg-emerald-100 p-2 text-[11px] text-emerald-800 rounded mb-2 border border-emerald-200 font-bold">⚠️ Obrigatório anexar o Boleto ou Nota Fiscal.</div>}
             {category === "Solicitação de Reembolso" && <div className="bg-indigo-100 p-2 text-[11px] text-indigo-800 rounded mb-2 border border-indigo-200 font-bold">⚠️ Obrigatório anexar o Comprovante/Recibo.</div>}
             {category === "Emissão de Documento" && <div className="bg-green-100 p-2 text-[11px] text-green-800 rounded mb-2 border border-green-200 font-bold">⚠️ Obrigatório anexar a OV.</div>}
+            {/* NOVO ALERTA */}
+            {category === "Divergência" && <div className="bg-orange-100 p-2 text-[11px] text-orange-800 rounded mb-2 border border-orange-200 font-bold">⚠️ Se possível, anexe foto ou evidência da divergência.</div>}
 
             <Label className="mb-2 block font-semibold flex items-center gap-2"><UploadCloud size={16}/> Anexar Arquivos</Label>
             

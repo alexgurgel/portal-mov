@@ -11,8 +11,9 @@ import {
   FileSignature,
   LogOut,
   ClipboardList,
-  Banknote, // Ícone Pagamento
-  Receipt   // Ícone Reembolso
+  Banknote,
+  Receipt,
+  AlertTriangle // Novo ícone para Divergência
 } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { useState, useEffect } from "react"
@@ -24,7 +25,6 @@ export function Sidebar() {
   const router = useRouter()
   const [userEmail, setUserEmail] = useState("")
 
-  // 1. Busca o e-mail do usuário logado ao carregar
   useEffect(() => {
     async function getUser() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -40,7 +40,6 @@ export function Sidebar() {
     router.push('/')
   }
 
-  // --- CONFIGURAÇÃO DE ACESSO ---
   const usuariosPermitidos = [
     "alex.batista@grupomov.com.br", 
     "manuela.malagoli@grupomov.com.br",
@@ -48,21 +47,22 @@ export function Sidebar() {
   ]
   const temAcessoEspecial = usuariosPermitidos.includes(userEmail)
 
-  // 2. Lista de Menus
   const menus = [
     { name: "Visão Geral", icon: LayoutDashboard, href: "/dashboard" },
     { name: "Nova Locação", icon: Truck, href: "/dashboard?sector=Nova Locação" },
     { name: "Compra", icon: ShoppingCart, href: "/dashboard?sector=Compra" },
     { name: "Cotação", icon: FileText, href: "/dashboard?sector=Cotação" },
-    { name: "Solicitação Pagamento", icon: Banknote, href: "/dashboard?sector=Solicitação de Pagamento" }, // NOVO
-    { name: "Solicitação Reembolso", icon: Receipt, href: "/dashboard?sector=Solicitação de Reembolso" },   // NOVO
+    { name: "Solicitação Pagamento", icon: Banknote, href: "/dashboard?sector=Solicitação de Pagamento" },
+    { name: "Solicitação Reembolso", icon: Receipt, href: "/dashboard?sector=Solicitação de Reembolso" },
+    // NOVO ITEM
+    { name: "Divergência / Devolução", icon: AlertTriangle, href: "/dashboard?sector=Divergência" },
+    
     { name: "Cadastro Mercadoria", icon: Package, href: "/dashboard?sector=Cadastro Mercadoria" },
     { name: "Cadastro Cliente", icon: Users, href: "/dashboard?sector=Cadastro Cliente" },
     { name: "Cadastro Fornecedor", icon: Users, href: "/dashboard?sector=Cadastro Fornecedor" },
     { name: "Emissão de Documento", icon: FileSignature, href: "/dashboard?sector=Emissão de Documento" },
   ]
 
-  // Se tiver acesso, adicionamos o menu novo na lista
   if (temAcessoEspecial) {
     menus.push({ 
         name: "Controle de Relatório", 
