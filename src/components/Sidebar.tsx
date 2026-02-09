@@ -13,7 +13,8 @@ import {
   ClipboardList,
   Banknote,
   Receipt,
-  AlertTriangle // Novo ícone para Divergência
+  AlertTriangle,
+  BarChart3 // Ícone novo para Indicadores
 } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { useState, useEffect } from "react"
@@ -40,6 +41,8 @@ export function Sidebar() {
     router.push('/')
   }
 
+  // Apenas admins podem ver o menu de relatórios, mas TODOS podem ver os indicadores?
+  // Se quiser restringir indicadores, coloque dentro do if(temAcessoEspecial)
   const usuariosPermitidos = [
     "alex.batista@grupomov.com.br", 
     "manuela.malagoli@grupomov.com.br",
@@ -49,14 +52,16 @@ export function Sidebar() {
 
   const menus = [
     { name: "Visão Geral", icon: LayoutDashboard, href: "/dashboard" },
+    
+    // NOVO MENU DE INDICADORES
+    { name: "Indicadores / SLA", icon: BarChart3, href: "/dashboard/indicadores" },
+
     { name: "Nova Locação", icon: Truck, href: "/dashboard?sector=Nova Locação" },
     { name: "Compra", icon: ShoppingCart, href: "/dashboard?sector=Compra" },
     { name: "Cotação", icon: FileText, href: "/dashboard?sector=Cotação" },
     { name: "Solicitação Pagamento", icon: Banknote, href: "/dashboard?sector=Solicitação de Pagamento" },
     { name: "Solicitação Reembolso", icon: Receipt, href: "/dashboard?sector=Solicitação de Reembolso" },
-    // NOVO ITEM
     { name: "Divergência / Devolução", icon: AlertTriangle, href: "/dashboard?sector=Divergência" },
-    
     { name: "Cadastro Mercadoria", icon: Package, href: "/dashboard?sector=Cadastro Mercadoria" },
     { name: "Cadastro Cliente", icon: Users, href: "/dashboard?sector=Cadastro Cliente" },
     { name: "Cadastro Fornecedor", icon: Users, href: "/dashboard?sector=Cadastro Fornecedor" },
@@ -83,7 +88,8 @@ export function Sidebar() {
             const isActive = 
                 (item.href === "/dashboard" && pathname === "/dashboard" && !currentSector) || 
                 (item.href === `/dashboard?sector=${currentSector}`) || 
-                (item.href === pathname && pathname === "/controle-relatorio")
+                (item.href === pathname && pathname === "/controle-relatorio") ||
+                (item.href === pathname && pathname === "/dashboard/indicadores") // Ativa na página nova
 
             return (
                 <Link 

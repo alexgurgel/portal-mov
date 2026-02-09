@@ -15,7 +15,10 @@ import {
   DialogFooter,
   DialogDescription
 } from "@/components/ui/dialog"
-import { CheckCircle2, AlertCircle, Clock, DownloadCloud, Undo2, AlertTriangle, UploadCloud, Paperclip } from "lucide-react"
+import { 
+    CheckCircle2, AlertCircle, Clock, DownloadCloud, 
+    Undo2, AlertTriangle, UploadCloud, Paperclip, XCircle 
+} from "lucide-react"
 
 export default function TicketDetails() {
   const params = useParams()
@@ -23,17 +26,21 @@ export default function TicketDetails() {
   const [ticket, setTicket] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
-  // Estados para a Baixa de Item (Modal)
+  // Estados para a Baixa de Item (Sucesso)
   const [modalOpen, setModalOpen] = useState(false)
   const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null)
   const [resolutionData, setResolutionData] = useState({ valor: '', oc: '', previsao: '' })
   const [arquivoBaixa, setArquivoBaixa] = useState<File | null>(null)
 
-  // Estados para DEVOLUÇÃO
+  // Estados para Devolução de ITEM (Parcial)
+  const [modalItemReturnOpen, setModalItemReturnOpen] = useState(false)
+  const [itemReturnReason, setItemReturnReason] = useState("")
+
+  // Estados para Devolução GLOBAL (Ticket inteiro)
   const [returnModalOpen, setReturnModalOpen] = useState(false)
   const [returnReason, setReturnReason] = useState("")
 
-  // Estados para RESOLUÇÃO GLOBAL
+  // Estados para Resolução GLOBAL
   const [globalResolveModalOpen, setGlobalResolveModalOpen] = useState(false)
   const [arquivoGlobal, setArquivoGlobal] = useState<File | null>(null)
   const [obsGlobal, setObsGlobal] = useState("")
@@ -71,6 +78,7 @@ export default function TicketDetails() {
       return { url: data.publicUrl, nome: nomeLimpo }
   }
 
+  // --- LÓGICA: BAIXAR ITEM (SUCESSO) ---
   const abrirModalBaixa = (index: number) => {
     setSelectedItemIndex(index)
     setResolutionData({ valor: '', oc: '', previsao: '' }) 
@@ -90,7 +98,7 @@ export default function TicketDetails() {
         const novosItens = [...ticket.custom_data.itens_tabela]
         novosItens[selectedItemIndex] = {
             ...novosItens[selectedItemIndex],
-            status: 'concluido',
+            status: 'concluido', // STATUS DE SUCESSO
             resolucao: {
                 data_baixa: new Date().toISOString(),
                 ...resolutionData,
@@ -98,8 +106,10 @@ export default function TicketDetails() {
             }
         }
 
-        const todosConcluidos = novosItens.every((item: any) => item.status === 'concluido')
-        const novoStatusTicket = todosConcluidos ? 'resolvido' : 'em_andamento'
+        // Verifica se TODOS os itens estão processados (Concluídos OU Devolvidos)
+        const todosProcessados = novosItens.every((item: any) => item.status === 'concluido' || item.status === 'devolvido')
+        const novoStatusTicket = todosProcessados ? 'resolvido' : 'em_andamento'
+        
         const novoCustomData = { ...ticket.custom_data, itens_tabela: novosItens }
 
         const { error } = await supabase.from('tickets').update({ custom_data: novoCustomData, status: novoStatusTicket }).eq('id', ticket.id)
@@ -107,14 +117,59 @@ export default function TicketDetails() {
         if (!error) {
             setTicket({ ...ticket, custom_data: novoCustomData, status: novoStatusTicket })
             setModalOpen(false)
-            alert(todosConcluidos ? "Ticket finalizado com sucesso!" : "Item baixado com sucesso!")
-            if(todosConcluidos) router.push('/dashboard')
+            alert(todosProcessados ? "Todos os itens processados. Chamado finalizado!" : "Item baixado com sucesso!")
+            if(todosProcessados) router.push('/dashboard')
         } else {
             alert("Erro ao salvar.")
         }
     } catch (err: any) { alert(err.message) }
   }
 
+  // --- LÓGICA: DEVOLVER ITEM (PARCIAL) ---
+  const abrirModalDevolucaoItem = (index: number) => {
+      setSelectedItemIndex(index)
+      setItemReturnReason("")
+      setModalItemReturnOpen(true)
+  }
+
+  const confirmarDevolucaoItem = async () => {
+      if (selectedItemIndex === null || !ticket) return
+      if (!itemReturnReason.trim()) return alert("Informe o motivo da devolução deste item.")
+
+      try {
+        const novosItens = [...ticket.custom_data.itens_tabela]
+        novosItens[selectedItemIndex] = {
+            ...novosItens[selectedItemIndex],
+            status: 'devolvido', // NOVO STATUS DE ITEM
+            resolucao: {
+                data_baixa: new Date().toISOString(),
+                motivo_devolucao: itemReturnReason
+            }
+        }
+
+        // Verifica se TODOS os itens estão processados
+        const todosProcessados = novosItens.every((item: any) => item.status === 'concluido' || item.status === 'devolvido')
+        // Se todos foram processados, o ticket vira 'resolvido' (pois saiu da fila de pendencia do adm)
+        const novoStatusTicket = todosProcessados ? 'resolvido' : 'em_andamento'
+        
+        const novoCustomData = { ...ticket.custom_data, itens_tabela: novosItens }
+
+        const { error } = await supabase.from('tickets').update({ custom_data: novoCustomData, status: novoStatusTicket }).eq('id', ticket.id)
+
+        if (!error) {
+            setTicket({ ...ticket, custom_data: novoCustomData, status: novoStatusTicket })
+            setModalItemReturnOpen(false)
+            alert("Item marcado como devolvido.")
+            if(todosProcessados) router.push('/dashboard')
+        } else {
+            alert("Erro ao salvar.")
+        }
+
+      } catch (err: any) { alert(err.message) }
+  }
+
+
+  // --- LÓGICA GERAL (Ticket Inteiro) ---
   const handleOpenGlobalResolve = () => {
       setObsGlobal("")
       setArquivoGlobal(null)
@@ -148,7 +203,7 @@ export default function TicketDetails() {
     } catch (err: any) { alert(err.message) }
   }
 
-  async function confirmarDevolucao() {
+  async function confirmarDevolucaoGlobal() {
       if (!returnReason.trim()) return alert("Por favor, explique o motivo da devolução.")
       const novoCustomData = { ...ticket.custom_data, motivo_devolucao: returnReason }
       const { error } = await supabase.from('tickets').update({ status: 'devolvida', custom_data: novoCustomData }).eq('id', ticket.id)
@@ -168,16 +223,12 @@ export default function TicketDetails() {
   if (!ticket) return <div className="p-10 text-center text-red-500 font-bold">Ticket não encontrado.</div>
 
   const itensTabela = ticket.custom_data?.itens_tabela
-  // COMPATIBILIDADE: Pega lista nova OU arquivo único antigo
   const anexos = ticket.custom_data?.anexos || []
-  const anexoUnico = ticket.custom_data?.url_arquivo_anexo 
-      ? [{ nome: ticket.custom_data.nome_arquivo_anexo || 'Arquivo', url: ticket.custom_data.url_arquivo_anexo }] 
-      : []
-  
-  // Se não tiver a lista nova, usa o antigo para não quebrar chamados velhos
+  const anexoUnico = ticket.custom_data?.url_arquivo_anexo ? [{ nome: ticket.custom_data.nome_arquivo_anexo || 'Arquivo', url: ticket.custom_data.url_arquivo_anexo }] : []
   const listaExibicao = anexos.length > 0 ? anexos : anexoUnico
 
-  const pendencias = itensTabela?.filter((i: any) => i.status !== 'concluido').length || 0
+  // Pendencia agora considera itens que não são concluidos NEM devolvidos
+  const pendencias = itensTabela?.filter((i: any) => i.status !== 'concluido' && i.status !== 'devolvido').length || 0
   const resolucaoGlobal = ticket.custom_data?.resolucao_global
 
   return (
@@ -200,15 +251,14 @@ export default function TicketDetails() {
         </div>
       </div>
 
-      {/* BANNERS DE STATUS */}
+      {/* BANNERS DE STATUS GLOBAL */}
       {ticket.status === 'devolvida' && ticket.custom_data?.motivo_devolucao && (
           <div className="bg-orange-50 border-l-4 border-orange-500 p-4 rounded shadow-sm">
               <div className="flex items-start gap-3">
                   <AlertTriangle className="text-orange-600 mt-1" />
                   <div>
-                      <h3 className="font-bold text-orange-800">Solicitação Devolvida</h3>
+                      <h3 className="font-bold text-orange-800">Solicitação Devolvida (Global)</h3>
                       <p className="text-orange-900 mt-1 font-medium">Motivo: "{ticket.custom_data.motivo_devolucao}"</p>
-                      <p className="text-xs text-orange-700 mt-2">Por favor, ajuste o necessário e abra uma nova solicitação ou entre em contato.</p>
                   </div>
               </div>
           </div>
@@ -237,6 +287,7 @@ export default function TicketDetails() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="md:col-span-3 space-y-6">
             
+            {/* ALERTAS DE ITENS */}
             {ticket.status !== 'resolvido' && ticket.status !== 'devolvida' && itensTabela && (
                 <div className={`p-4 rounded-md flex items-center gap-3 ${pendencias > 0 ? 'bg-blue-50 border border-blue-200' : 'bg-green-50 border border-green-200'}`}>
                     {pendencias > 0 ? <Clock className="text-blue-500" /> : <CheckCircle2 className="text-green-500" />}
@@ -257,7 +308,7 @@ export default function TicketDetails() {
                         <p className="whitespace-pre-wrap">{ticket.description}</p>
                     </div>
 
-                    {/* TABELA DE ITENS */}
+                    {/* TABELA DE ITENS - ATUALIZADA */}
                     {itensTabela && Array.isArray(itensTabela) && itensTabela.length > 0 && (
                         <div className="border rounded overflow-hidden">
                             <div className="bg-gray-100 p-3 text-xs font-bold text-gray-700 border-b grid grid-cols-12 gap-4 items-center">
@@ -270,14 +321,18 @@ export default function TicketDetails() {
                             </div>
                             {itensTabela.map((item: any, idx: number) => {
                                 const isDone = item.status === 'concluido'
+                                const isReturned = item.status === 'devolvido'
+                                
                                 return (
-                                    <div key={idx} className={`p-3 text-sm border-b grid grid-cols-12 gap-4 items-center ${isDone ? 'bg-green-50/50' : 'hover:bg-gray-50'}`}>
+                                    <div key={idx} className={`p-3 text-sm border-b grid grid-cols-12 gap-4 items-center ${isDone ? 'bg-green-50/50' : isReturned ? 'bg-orange-50/50' : 'hover:bg-gray-50'}`}>
                                         <div className="col-span-1 text-gray-500 text-xs">{item.codigo || '-'}</div>
                                         <div className="col-span-4 font-medium">{item.descricao}{item.pat && <span className="block text-xs text-gray-400">PAT: {item.pat}</span>}</div>
                                         <div className="col-span-1 text-center font-bold bg-gray-100 rounded p-1">{item.qtd}</div>
                                         <div className="col-span-2 text-xs text-gray-500">{item.aplicacao || '-'}</div>
+                                        
+                                        {/* COLUNA DE STATUS DO ITEM */}
                                         <div className="col-span-2 text-xs">
-                                            {isDone ? (
+                                            {isDone && (
                                                 <div className="text-green-700">
                                                     <span className="flex items-center gap-1 font-bold"><CheckCircle2 size={12}/> Concluído</span>
                                                     {item.resolucao?.valor && <span>R$ {item.resolucao.valor}</span>}
@@ -286,13 +341,29 @@ export default function TicketDetails() {
                                                         <a href={item.resolucao.arquivo.url} target="_blank" className="flex items-center gap-1 text-blue-600 underline mt-1"><Paperclip size={10}/> Anexo</a>
                                                     )}
                                                 </div>
-                                            ) : (
+                                            )}
+                                            {isReturned && (
+                                                <div className="text-orange-700">
+                                                    <span className="flex items-center gap-1 font-bold"><Undo2 size={12}/> Devolvido</span>
+                                                    <span className="block mt-1 italic">"{item.resolucao?.motivo_devolucao}"</span>
+                                                </div>
+                                            )}
+                                            {!isDone && !isReturned && (
                                                 <span className="flex items-center gap-1 text-orange-500 font-bold"><Clock size={12}/> Pendente</span>
                                             )}
                                         </div>
-                                        <div className="col-span-2 text-center">
-                                            {!isDone && ticket.status !== 'devolvida' && (
-                                                <Button size="sm" onClick={() => abrirModalBaixa(idx)} className="bg-black text-white hover:bg-gray-800 w-full">Baixar Item</Button>
+
+                                        {/* COLUNA DE AÇÃO */}
+                                        <div className="col-span-2 text-center flex flex-col gap-2">
+                                            {!isDone && !isReturned && ticket.status !== 'devolvida' && (
+                                                <>
+                                                    <Button size="sm" onClick={() => abrirModalBaixa(idx)} className="bg-black text-white hover:bg-gray-800 w-full h-7 text-xs">
+                                                        Baixar
+                                                    </Button>
+                                                    <Button size="sm" onClick={() => abrirModalDevolucaoItem(idx)} className="bg-white border border-red-200 text-red-600 hover:bg-red-50 w-full h-7 text-xs">
+                                                        Devolver
+                                                    </Button>
+                                                </>
                                             )}
                                         </div>
                                     </div>
@@ -301,7 +372,7 @@ export default function TicketDetails() {
                         </div>
                     )}
 
-                    {/* DADOS ADICIONAIS */}
+                    {/* DADOS ADICIONAIS E LISTA DE ANEXOS (Mantido igual) */}
                     {ticket.custom_data && (
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
                             {Object.entries(ticket.custom_data).map(([key, value]) => {
@@ -317,7 +388,6 @@ export default function TicketDetails() {
                         </div>
                     )}
 
-                    {/* --- LISTA DE ARQUIVOS ANEXADOS (NOVA VERSÃO) --- */}
                     {listaExibicao.length > 0 && (
                         <div className="mt-4 p-4 bg-blue-50 border border-blue-100 rounded">
                             <div className="flex items-center gap-2 mb-3">
@@ -350,7 +420,7 @@ export default function TicketDetails() {
                 {ticket.status !== 'resolvido' && ticket.status !== 'devolvida' && (
                     <>
                         <Button variant="outline" onClick={() => setReturnModalOpen(true)} className="border-orange-200 text-orange-700 hover:bg-orange-50 hover:text-orange-800 gap-2">
-                            <Undo2 size={16} /> Devolver Solicitação
+                            <Undo2 size={16} /> Devolver Tudo
                         </Button>
                         {(!itensTabela || itensTabela.length === 0) && (
                             <Button onClick={handleOpenGlobalResolve} className="bg-green-600 hover:bg-green-700 text-white gap-2">
@@ -390,6 +460,30 @@ export default function TicketDetails() {
         </DialogContent>
       </Dialog>
 
+      {/* --- NOVO: MODAL DE DEVOLUÇÃO DE ITEM (PARCIAL) --- */}
+      <Dialog open={modalItemReturnOpen} onOpenChange={setModalItemReturnOpen}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle className="text-red-600 flex items-center gap-2">
+                    <XCircle size={20}/> Devolver Item Específico
+                </DialogTitle>
+                <DialogDescription>Este item será marcado como devolvido, mas o restante do chamado continuará.</DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+                <Label>Motivo da Devolução do Item</Label>
+                <Textarea 
+                    value={itemReturnReason} 
+                    onChange={e => setItemReturnReason(e.target.value)} 
+                    placeholder="Ex: Item indisponível; Especificação incorreta..."
+                />
+            </div>
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setModalItemReturnOpen(false)}>Cancelar</Button>
+                <Button onClick={confirmarDevolucaoItem} className="bg-red-600 hover:bg-red-700 text-white">Confirmar Devolução</Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* MODAL RESOLUÇÃO GLOBAL */}
       <Dialog open={globalResolveModalOpen} onOpenChange={setGlobalResolveModalOpen}>
         <DialogContent>
@@ -405,16 +499,16 @@ export default function TicketDetails() {
         </DialogContent>
       </Dialog>
 
-      {/* MODAL DEVOLUÇÃO */}
+      {/* MODAL DEVOLUÇÃO GLOBAL */}
       <Dialog open={returnModalOpen} onOpenChange={setReturnModalOpen}>
         <DialogContent>
-            <DialogHeader><DialogTitle>Devolver Solicitação</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>Devolver Solicitação Inteira</DialogTitle></DialogHeader>
             <div className="py-4 space-y-4">
                 <Label>Motivo</Label><Textarea rows={4} value={returnReason} onChange={e => setReturnReason(e.target.value)}/>
             </div>
             <DialogFooter>
                 <Button variant="outline" onClick={() => setReturnModalOpen(false)}>Cancelar</Button>
-                <Button onClick={confirmarDevolucao} className="bg-orange-600 text-white">Confirmar</Button>
+                <Button onClick={confirmarDevolucaoGlobal} className="bg-orange-600 text-white">Confirmar</Button>
             </DialogFooter>
         </DialogContent>
       </Dialog>
