@@ -1,5 +1,6 @@
 'use client'
-import { useState, useEffect } from "react"
+
+import { useState, useEffect, Suspense } from "react"
 import Link from "next/link"
 import { supabase } from "@/lib/supabaseClient"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -7,19 +8,29 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft, Filter, CalendarDays, CheckCircle2, AlertCircle, Clock, RotateCcw } from "lucide-react"
 
-export default function IndicadoresPage() {
+// --- COMPONENTE COM O CONTEÚDO (Lógica separada aqui) ---
+function IndicadoresContent() {
   const [tickets, setTickets] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   
   // Data padrão: Últimos 30 dias
-  const dataHoje = new Date().toISOString().split('T')[0]
-  const dataMesAtras = new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0]
-
-  const [startDate, setStartDate] = useState(dataMesAtras)
-  const [endDate, setEndDate] = useState(dataHoje)
+  // Usamos useEffect para definir a data inicial apenas no cliente para evitar erro de hidratação (data diferente no server/client)
+  const [startDate, setStartDate] = useState("")
+  const [endDate, setEndDate] = useState("")
 
   useEffect(() => {
-    fetchData()
+    const hoje = new Date()
+    const mesAtras = new Date()
+    mesAtras.setDate(hoje.getDate() - 30)
+    
+    setEndDate(hoje.toISOString().split('T')[0])
+    setStartDate(mesAtras.toISOString().split('T')[0])
+  }, [])
+
+  useEffect(() => {
+    if (startDate && endDate) {
+        fetchData()
+    }
   }, [startDate, endDate])
 
   async function fetchData() {
@@ -96,7 +107,7 @@ export default function IndicadoresPage() {
   const categoryKeys = Object.keys(metrics).sort()
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-6 bg-gray-50 min-h-screen">
+    <div className="p-8 max-w-7xl mx-auto space-y-6 bg-white min-h-screen">
       
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
@@ -109,14 +120,14 @@ export default function IndicadoresPage() {
             <p className="text-gray-500 text-sm">Acompanhe o volume e o tempo médio de atendimento por área.</p>
         </div>
 
-        <div className="flex items-end gap-2 bg-white p-3 rounded-lg border shadow-sm">
+        <div className="flex items-end gap-2 bg-gray-50 p-3 rounded-lg border shadow-sm">
             <div>
                 <label className="text-xs font-bold text-gray-500 block mb-1">Início</label>
-                <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="h-8 text-xs"/>
+                <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="h-8 text-xs bg-white"/>
             </div>
             <div>
                 <label className="text-xs font-bold text-gray-500 block mb-1">Fim</label>
-                <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="h-8 text-xs"/>
+                <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="h-8 text-xs bg-white"/>
             </div>
             <Button size="sm" variant="secondary" onClick={fetchData}>
                 <Filter className="w-4 h-4"/>
@@ -149,12 +160,11 @@ export default function IndicadoresPage() {
                 }
 
                 return (
-                    // AQUI ESTÁ A MUDANÇA: border-t-[#F3C843] (Amarelo MOV)
-                    <Card key={cat} className="border-t-4 border-t-[#F3C843] shadow-md hover:shadow-lg transition-shadow">
+                    <Card key={cat} className="border-t-4 border-t-[#F3C843] shadow-md hover:shadow-lg transition-shadow bg-gray-50">
                         <CardHeader className="pb-2">
                             <CardTitle className="text-lg font-bold text-gray-800 flex justify-between items-center">
                                 {cat}
-                                <span className="text-sm font-bold text-gray-600 bg-gray-100 px-3 py-1 rounded">
+                                <span className="text-sm font-bold text-gray-600 bg-white px-3 py-1 rounded border border-gray-200">
                                     Total: {data.total}
                                 </span>
                             </CardTitle>
@@ -162,28 +172,27 @@ export default function IndicadoresPage() {
                         <CardContent>
                             
                             <div className="grid grid-cols-2 gap-2 mb-4">
-                                <div className="bg-yellow-50 p-2 rounded border border-yellow-100 flex flex-col items-center">
-                                    <span className="text-2xl font-bold text-yellow-600">{data.aberto}</span>
-                                    <span className="text-[10px] uppercase font-bold text-yellow-700 flex items-center gap-1"><AlertCircle size={10}/> Abertos</span>
+                                <div className="bg-yellow-100/50 p-2 rounded border border-yellow-200 flex flex-col items-center">
+                                    <span className="text-2xl font-bold text-yellow-700">{data.aberto}</span>
+                                    <span className="text-[10px] uppercase font-bold text-yellow-800 flex items-center gap-1"><AlertCircle size={10}/> Abertos</span>
                                 </div>
-                                <div className="bg-blue-50 p-2 rounded border border-blue-100 flex flex-col items-center">
-                                    <span className="text-2xl font-bold text-blue-600">{data.em_andamento}</span>
-                                    <span className="text-[10px] uppercase font-bold text-blue-700 flex items-center gap-1"><Clock size={10}/> Andamento</span>
+                                <div className="bg-blue-100/50 p-2 rounded border border-blue-200 flex flex-col items-center">
+                                    <span className="text-2xl font-bold text-blue-700">{data.em_andamento}</span>
+                                    <span className="text-[10px] uppercase font-bold text-blue-800 flex items-center gap-1"><Clock size={10}/> Andamento</span>
                                 </div>
-                                <div className="bg-orange-50 p-2 rounded border border-orange-100 flex flex-col items-center">
-                                    <span className="text-2xl font-bold text-orange-600">{data.devolvida}</span>
-                                    <span className="text-[10px] uppercase font-bold text-orange-700 flex items-center gap-1"><RotateCcw size={10}/> Devolvido</span>
+                                <div className="bg-orange-100/50 p-2 rounded border border-orange-200 flex flex-col items-center">
+                                    <span className="text-2xl font-bold text-orange-700">{data.devolvida}</span>
+                                    <span className="text-[10px] uppercase font-bold text-orange-800 flex items-center gap-1"><RotateCcw size={10}/> Devolvido</span>
                                 </div>
-                                <div className="bg-green-50 p-2 rounded border border-green-100 flex flex-col items-center">
-                                    <span className="text-2xl font-bold text-green-600">{data.resolvido}</span>
-                                    <span className="text-[10px] uppercase font-bold text-green-700 flex items-center gap-1"><CheckCircle2 size={10}/> Concluído</span>
+                                <div className="bg-green-100/50 p-2 rounded border border-green-200 flex flex-col items-center">
+                                    <span className="text-2xl font-bold text-green-700">{data.resolvido}</span>
+                                    <span className="text-[10px] uppercase font-bold text-green-800 flex items-center gap-1"><CheckCircle2 size={10}/> Concluído</span>
                                 </div>
                             </div>
 
-                            <div className="border-t pt-3 mt-2">
+                            <div className="border-t border-gray-200 pt-3 mt-2">
                                 <p className="text-xs text-gray-500 font-bold uppercase mb-1">Prazo Médio (Dias Úteis)</p>
                                 <div className="flex items-baseline gap-2">
-                                    {/* Mudei o ícone para cinza para combinar melhor com o amarelo */}
                                     <CalendarDays className={`w-5 h-5 ${isHigh ? 'text-red-500' : 'text-gray-400'}`} />
                                     <span className={`text-3xl font-black ${isHigh ? 'text-red-600' : 'text-gray-800'}`}>
                                         {mediaDisplay}
@@ -200,5 +209,14 @@ export default function IndicadoresPage() {
           </div>
       )}
     </div>
+  )
+}
+
+// --- EXPORTAÇÃO PRINCIPAL COM SUSPENSE (Isso corrige o erro de build) ---
+export default function IndicadoresPage() {
+  return (
+    <Suspense fallback={<div className="flex h-screen items-center justify-center text-gray-500">Carregando painel...</div>}>
+      <IndicadoresContent />
+    </Suspense>
   )
 }
