@@ -151,6 +151,10 @@ export function NewTicket() {
       else if (category === "Cadastro Mercadoria") {
         finalTitle = `Cadastro Item: ${formData.descricao_item}`
         description = `Cód: ${formData.codigo} | NCM: ${formData.ncm} | Valor: R$ ${formData.valor_item}`
+        // INCLUI A OBSERVAÇÃO NA DESCRIÇÃO PRINCIPAL (Se existir)
+        if (formData.observacao) {
+            description += ` | Obs: ${formData.observacao}`
+        }
       }
       else if (category === "Emissão de Documento") {
         finalTitle = `Doc: ${formData.tipo_emissao}`
@@ -366,6 +370,15 @@ export function NewTicket() {
                         * Revenda: Venda externa. Frota: Uso interno. Almox: Estoque de manutenção.
                     </p>
                 </div>
+
+                {/* --- NOVO CAMPO DE OBSERVAÇÃO --- */}
+                <div className="mt-2 border-t border-purple-100 pt-2">
+                    <Label>Observação</Label>
+                    <Textarea 
+                        onChange={e => updateForm('observacao', e.target.value)} 
+                        placeholder="Detalhes ou observações sobre a mercadoria..." 
+                    />
+                </div>
             </div>
         )
       case "Emissão de Documento":
@@ -420,9 +433,7 @@ export function NewTicket() {
                         <SelectItem value="Cotação">Cotação</SelectItem>
                         <SelectItem value="Solicitação de Pagamento">Solicitação de Pagamento</SelectItem>
                         <SelectItem value="Solicitação de Reembolso">Solicitação de Reembolso</SelectItem>
-                        {/* NOVO ITEM */}
                         <SelectItem value="Divergência">Divergência / Devolução</SelectItem>
-                        
                         <SelectItem value="Cadastro Mercadoria">Cadastro Mercadoria</SelectItem>
                         <SelectItem value="Cadastro Cliente">Cadastro Cliente</SelectItem>
                         <SelectItem value="Cadastro Fornecedor">Cadastro Fornecedor</SelectItem>
@@ -450,7 +461,6 @@ export function NewTicket() {
             {category === "Solicitação de Pagamento" && <div className="bg-emerald-100 p-2 text-[11px] text-emerald-800 rounded mb-2 border border-emerald-200 font-bold">⚠️ Obrigatório anexar o Boleto ou Nota Fiscal.</div>}
             {category === "Solicitação de Reembolso" && <div className="bg-indigo-100 p-2 text-[11px] text-indigo-800 rounded mb-2 border border-indigo-200 font-bold">⚠️ Obrigatório anexar o Comprovante/Recibo.</div>}
             {category === "Emissão de Documento" && <div className="bg-green-100 p-2 text-[11px] text-green-800 rounded mb-2 border border-green-200 font-bold">⚠️ Obrigatório anexar a OV.</div>}
-            {/* NOVO ALERTA */}
             {category === "Divergência" && <div className="bg-orange-100 p-2 text-[11px] text-orange-800 rounded mb-2 border border-orange-200 font-bold">⚠️ Se possível, anexe foto ou evidência da divergência.</div>}
 
             <Label className="mb-2 block font-semibold flex items-center gap-2"><UploadCloud size={16}/> Anexar Arquivos</Label>
