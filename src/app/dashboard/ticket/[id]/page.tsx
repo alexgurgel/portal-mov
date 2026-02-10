@@ -106,9 +106,13 @@ export default function TicketDetails() {
             }
         }
 
-        // Verifica se TODOS os itens estão processados (Concluídos OU Devolvidos)
+        // LÓGICA CORRIGIDA DE STATUS
         const todosProcessados = novosItens.every((item: any) => item.status === 'concluido' || item.status === 'devolvido')
-        const novoStatusTicket = todosProcessados ? 'resolvido' : 'em_andamento'
+        const todosDevolvidos = novosItens.every((item: any) => item.status === 'devolvido')
+        
+        const novoStatusTicket = todosProcessados 
+            ? (todosDevolvidos ? 'devolvida' : 'resolvido') 
+            : 'em_andamento'
         
         const novoCustomData = { ...ticket.custom_data, itens_tabela: novosItens }
 
@@ -147,10 +151,13 @@ export default function TicketDetails() {
             }
         }
 
-        // Verifica se TODOS os itens estão processados
+        // LÓGICA CORRIGIDA DE STATUS
         const todosProcessados = novosItens.every((item: any) => item.status === 'concluido' || item.status === 'devolvido')
-        // Se todos foram processados, o ticket vira 'resolvido' (pois saiu da fila de pendencia do adm)
-        const novoStatusTicket = todosProcessados ? 'resolvido' : 'em_andamento'
+        const todosDevolvidos = novosItens.every((item: any) => item.status === 'devolvido')
+        
+        const novoStatusTicket = todosProcessados 
+            ? (todosDevolvidos ? 'devolvida' : 'resolvido') 
+            : 'em_andamento'
         
         const novoCustomData = { ...ticket.custom_data, itens_tabela: novosItens }
 
@@ -308,7 +315,7 @@ export default function TicketDetails() {
                         <p className="whitespace-pre-wrap">{ticket.description}</p>
                     </div>
 
-                    {/* TABELA DE ITENS - ATUALIZADA */}
+                    {/* TABELA DE ITENS */}
                     {itensTabela && Array.isArray(itensTabela) && itensTabela.length > 0 && (
                         <div className="border rounded overflow-hidden">
                             <div className="bg-gray-100 p-3 text-xs font-bold text-gray-700 border-b grid grid-cols-12 gap-4 items-center">
@@ -330,7 +337,6 @@ export default function TicketDetails() {
                                         <div className="col-span-1 text-center font-bold bg-gray-100 rounded p-1">{item.qtd}</div>
                                         <div className="col-span-2 text-xs text-gray-500">{item.aplicacao || '-'}</div>
                                         
-                                        {/* COLUNA DE STATUS DO ITEM */}
                                         <div className="col-span-2 text-xs">
                                             {isDone && (
                                                 <div className="text-green-700">
@@ -353,7 +359,6 @@ export default function TicketDetails() {
                                             )}
                                         </div>
 
-                                        {/* COLUNA DE AÇÃO */}
                                         <div className="col-span-2 text-center flex flex-col gap-2">
                                             {!isDone && !isReturned && ticket.status !== 'devolvida' && (
                                                 <>
@@ -372,7 +377,6 @@ export default function TicketDetails() {
                         </div>
                     )}
 
-                    {/* DADOS ADICIONAIS E LISTA DE ANEXOS (Mantido igual) */}
                     {ticket.custom_data && (
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
                             {Object.entries(ticket.custom_data).map(([key, value]) => {
@@ -460,7 +464,7 @@ export default function TicketDetails() {
         </DialogContent>
       </Dialog>
 
-      {/* --- NOVO: MODAL DE DEVOLUÇÃO DE ITEM (PARCIAL) --- */}
+      {/* MODAL DEVOLUÇÃO ITEM (PARCIAL) */}
       <Dialog open={modalItemReturnOpen} onOpenChange={setModalItemReturnOpen}>
         <DialogContent>
             <DialogHeader>
