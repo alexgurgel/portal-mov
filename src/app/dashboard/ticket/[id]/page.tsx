@@ -106,7 +106,6 @@ export default function TicketDetails() {
             }
         }
 
-        // LÓGICA CORRIGIDA DE STATUS
         const todosProcessados = novosItens.every((item: any) => item.status === 'concluido' || item.status === 'devolvido')
         const todosDevolvidos = novosItens.every((item: any) => item.status === 'devolvido')
         
@@ -151,7 +150,6 @@ export default function TicketDetails() {
             }
         }
 
-        // LÓGICA CORRIGIDA DE STATUS
         const todosProcessados = novosItens.every((item: any) => item.status === 'concluido' || item.status === 'devolvido')
         const todosDevolvidos = novosItens.every((item: any) => item.status === 'devolvido')
         
@@ -312,7 +310,8 @@ export default function TicketDetails() {
                 <CardContent className="space-y-6">
                     <div className="bg-gray-50 p-4 rounded border">
                         <h3 className="text-xs font-bold text-gray-500 uppercase mb-2">Descrição Geral</h3>
-                        <p className="whitespace-pre-wrap">{ticket.description}</p>
+                        {/* AQUI ESTÁ A CORREÇÃO DA DESCRIÇÃO GERAL */}
+                        <p className="whitespace-pre-wrap break-words">{ticket.description}</p>
                     </div>
 
                     {/* TABELA DE ITENS */}
@@ -333,10 +332,11 @@ export default function TicketDetails() {
                                 return (
                                     <div key={idx} className={`p-3 text-sm border-b grid grid-cols-12 gap-4 items-center ${isDone ? 'bg-green-50/50' : isReturned ? 'bg-orange-50/50' : 'hover:bg-gray-50'}`}>
                                         <div className="col-span-1 text-gray-500 text-xs">{item.codigo || '-'}</div>
-                                        <div className="col-span-4 font-medium">{item.descricao}{item.pat && <span className="block text-xs text-gray-400">PAT: {item.pat}</span>}</div>
+                                        <div className="col-span-4 font-medium break-words">{item.descricao}{item.pat && <span className="block text-xs text-gray-400">PAT: {item.pat}</span>}</div>
                                         <div className="col-span-1 text-center font-bold bg-gray-100 rounded p-1">{item.qtd}</div>
-                                        <div className="col-span-2 text-xs text-gray-500">{item.aplicacao || '-'}</div>
+                                        <div className="col-span-2 text-xs text-gray-500 break-words">{item.aplicacao || '-'}</div>
                                         
+                                        {/* COLUNA DE STATUS DO ITEM */}
                                         <div className="col-span-2 text-xs">
                                             {isDone && (
                                                 <div className="text-green-700">
@@ -359,6 +359,7 @@ export default function TicketDetails() {
                                             )}
                                         </div>
 
+                                        {/* COLUNA DE AÇÃO */}
                                         <div className="col-span-2 text-center flex flex-col gap-2">
                                             {!isDone && !isReturned && ticket.status !== 'devolvida' && (
                                                 <>
@@ -377,15 +378,17 @@ export default function TicketDetails() {
                         </div>
                     )}
 
+                    {/* DADOS ADICIONAIS - CORREÇÃO DE OVERFLOW */}
                     {ticket.custom_data && (
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
                             {Object.entries(ticket.custom_data).map(([key, value]) => {
                                 if (['description', 'prioridade', 'itens_tabela', 'nome_arquivo_anexo', 'url_arquivo_anexo', 'motivo_devolucao', 'resolucao_global', 'anexos'].includes(key)) return null
                                 if (!value) return null
                                 return (
-                                    <div key={key} className="bg-white p-3 rounded border shadow-sm">
+                                    <div key={key} className="bg-white p-3 rounded border shadow-sm max-h-60 overflow-y-auto">
                                         <span className="block text-[10px] font-bold text-gray-400 uppercase">{formatKey(key)}</span>
-                                        <span className="font-medium text-sm truncate">{String(value)}</span>
+                                        {/* AQUI ESTÁ A CORREÇÃO: break-words e whitespace-pre-wrap */}
+                                        <span className="font-medium text-sm break-words whitespace-pre-wrap">{String(value)}</span>
                                     </div>
                                 )
                             })}
