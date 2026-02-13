@@ -328,7 +328,7 @@ export function NewTicket() {
                 <h3 className="font-bold text-sm text-blue-900">Dados Cadastrais</h3>
                 {category === "Cadastro Cliente" && (
                     <div className="bg-yellow-100 p-2 text-xs text-yellow-800 rounded border border-yellow-200 font-semibold">
-                        ⚠️ Observação: Cadastro só pode ser solicitado após análise de crédito aprovada.
+                        ⚠️ Observação: Solicitação para análise de crédito e cadastro.
                     </div>
                 )}
                 <div className="grid gap-2"><Label>Razão Social / Nome</Label><Input onChange={e => updateForm('razao_social', e.target.value)} /></div>
