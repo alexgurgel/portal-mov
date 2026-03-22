@@ -54,7 +54,6 @@ export function Sidebar() {
   const menus = [
     { name: "Visão Geral", icon: LayoutDashboard, href: "/dashboard" },
     { name: "Indicadores / SLA", icon: BarChart3, href: "/dashboard/indicadores" },
-    { name: "Suporte / Melhorias", icon: Bug, href: "/dashboard/suporte" },
 
     { name: "Nova Locação", icon: Truck, href: "/dashboard?sector=Nova Locação" },
     { name: "Compra", icon: ShoppingCart, href: "/dashboard?sector=Compra" },
@@ -66,6 +65,7 @@ export function Sidebar() {
     { name: "Cadastro Cliente", icon: Users, href: "/dashboard?sector=Cadastro Cliente" },
     { name: "Cadastro Fornecedor", icon: Users, href: "/dashboard?sector=Cadastro Fornecedor" },
     { name: "Emissão de Documento", icon: FileSignature, href: "/dashboard?sector=Emissão de Documento" },
+    { name: "Suporte / Melhorias", icon: Bug, href: "/dashboard/suporte" },
   ]
 
   if (temAcessoEspecial) {
