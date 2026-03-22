@@ -1,6 +1,8 @@
 import { Suspense } from "react"
 import SuporteClient from "@/components/SuporteClient"
 
+export const dynamic = 'force-dynamic'
+
 export default function SuportePage() {
   return (
     <Suspense fallback={<div className="p-10 text-center">Carregando...</div>}>
