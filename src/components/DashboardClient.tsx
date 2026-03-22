@@ -97,7 +97,7 @@ function DashboardContent() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="w-full space-y-6">
       
       {/* CABEÇALHO */}
       <div className="flex flex-col md:flex-row justify-between items-end gap-4">
@@ -184,16 +184,16 @@ function DashboardContent() {
       {/* TABELA DE RESULTADOS */}
       <div className="bg-white rounded-lg shadow border overflow-hidden">
         <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
+            <table className="w-full text-sm text-left table-fixed">
                 <thead className="text-xs text-gray-700 uppercase bg-gray-50 border-b">
                     <tr>
-                        <th className="px-6 py-3">ID</th>
-                        <th className="px-6 py-3">Solicitante</th>
-                        <th className="px-6 py-3 w-1/3">Assunto / Descrição</th>
-                        <th className="px-6 py-3">Categoria</th>
-                        <th className="px-6 py-3">Prioridade</th>
-                        <th className="px-6 py-3">Data</th>
-                        <th className="px-6 py-3">Status</th>
+                        <th className="px-4 py-3 w-[5%]">ID</th>
+                        <th className="px-4 py-3 w-[11%]">Solicitante</th>
+                        <th className="px-4 py-3 w-[40%]">Assunto / Descrição</th>
+                        <th className="px-4 py-3 w-[12%]">Categoria</th>
+                        <th className="px-4 py-3 w-[8%]">Prioridade</th>
+                        <th className="px-4 py-3 w-[10%]">Data</th>
+                        <th className="px-4 py-3 w-[10%]">Status</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -210,31 +210,31 @@ function DashboardContent() {
                                 className="bg-white border-b hover:bg-gray-50 cursor-pointer transition-colors"
                                 onClick={() => window.location.href = `/dashboard/ticket/${ticket.id}`} 
                             >
-                                <td className="px-6 py-4 font-mono text-gray-500">#{ticket.id}</td>
+                                <td className="px-4 py-4 font-mono text-gray-500">#{ticket.id}</td>
                                 
-                                <td className="px-6 py-4 font-medium text-gray-800">
+                                <td className="px-4 py-4 font-medium text-gray-800 truncate">
                                     {ticket.requester_name || "—"}
                                 </td>
 
-                                <td className="px-6 py-4">
-                                    <div className="font-bold text-gray-900">{ticket.title}</div>
-                                    <div className="text-xs text-gray-500 line-clamp-1 mt-1">{ticket.description}</div>
+                                <td className="px-4 py-3 overflow-hidden">
+                                    <div className="font-bold text-gray-900 truncate">{ticket.title}</div>
+                                    <div className="text-xs text-gray-500 line-clamp-2 mt-1">{ticket.description}</div>
                                 </td>
-                                <td className="px-6 py-4">
-                                    <span className="bg-gray-100 text-gray-800 text-xs font-medium px-2.5 py-0.5 rounded border border-gray-200">
+                                <td className="px-4 py-4">
+                                    <span className="bg-gray-100 text-gray-800 text-xs font-medium px-2.5 py-0.5 rounded border border-gray-200 whitespace-nowrap">
                                         {ticket.category}
                                     </span>
                                 </td>
-                                <td className="px-6 py-4">
-                                    <span className={`text-xs font-bold uppercase ${getPriorityColor(ticket.priority)}`}>
+                                <td className="px-4 py-4">
+                                    <span className={`text-xs font-bold uppercase whitespace-nowrap ${getPriorityColor(ticket.priority)}`}>
                                         {ticket.priority}
                                     </span>
                                 </td>
-                                <td className="px-6 py-4 text-gray-500">
+                                <td className="px-4 py-4 text-gray-500 whitespace-nowrap">
                                     {new Date(ticket.created_at).toLocaleDateString('pt-BR')}
                                 </td>
-                                <td className="px-6 py-4">
-                                    <span className={`text-xs font-bold px-2 py-1 rounded-full uppercase ${getStatusColor(ticket.status)}`}>
+                                <td className="px-4 py-4">
+                                    <span className={`text-xs font-bold px-2 py-1 rounded-full uppercase whitespace-nowrap ${getStatusColor(ticket.status)}`}>
                                         {ticket.status ? ticket.status.replace('_', ' ') : '-'}
                                     </span>
                                 </td>

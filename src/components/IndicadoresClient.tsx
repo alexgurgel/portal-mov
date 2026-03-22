@@ -45,20 +45,40 @@ export function IndicadoresClient() {
 
   function countBusinessDays(start: string, end: string) {
     if (!start || !end) return 0
-    const startDate = new Date(start)
-    const endDate = new Date(end)
-    startDate.setHours(0,0,0,0)
-    endDate.setHours(0,0,0,0)
+
+    // Extrai só a parte da data (YYYY-MM-DD) para evitar erro de fuso horário
+    const [sy, sm, sd] = start.split('T')[0].split('-').map(Number)
+    const [ey, em, ed] = end.split('T')[0].split('-').map(Number)
+
+    const startUTC = new Date(Date.UTC(sy, sm - 1, sd))
+    const endUTC = new Date(Date.UTC(ey, em - 1, ed))
 
     let count = 0
-    let curDate = new Date(startDate)
+    let cur = new Date(startUTC)
 
-    while (curDate <= endDate) {
-        const dayOfWeek = curDate.getDay()
-        if (dayOfWeek !== 0 && dayOfWeek !== 6) count++ 
-        curDate.setDate(curDate.getDate() + 1)
+    while (cur <= endUTC) {
+      const day = cur.getUTCDay()
+      if (day !== 0 && day !== 6) count++
+      cur.setUTCDate(cur.getUTCDate() + 1)
     }
-    return Math.max(0, count - 1) 
+    return Math.max(0, count - 1)
+  }
+
+  function getResolvedAt(ticket: any): string | null {
+    // 1. Resolução global explícita (mais confiável)
+    const dataGlobal = ticket.custom_data?.resolucao_global?.data_resolucao
+    if (dataGlobal) return dataGlobal
+
+    // 2. Baixa por itens: pega a data mais recente entre os itens concluídos/devolvidos
+    const itens = ticket.custom_data?.itens_tabela
+    if (Array.isArray(itens) && itens.length > 0) {
+      const datas = itens
+        .filter((i: any) => i.resolucao?.data_baixa)
+        .map((i: any) => i.resolucao.data_baixa as string)
+      if (datas.length > 0) return datas.sort().at(-1)!
+    }
+
+    return null
   }
 
   const processMetrics = () => {
@@ -72,13 +92,14 @@ export function IndicadoresClient() {
         if (ticket.status === 'aberto') categories[cat].aberto++
         if (ticket.status === 'em_andamento') categories[cat].em_andamento++
         if (ticket.status === 'devolvida') categories[cat].devolvida++
-        if (ticket.status === 'resolvido') {
+        if (ticket.status === 'resolvido' || ticket.status === 'concluido') {
             categories[cat].resolvido++
-            const dataFim = ticket.updated_at || new Date().toISOString()
-            const dataInicio = ticket.created_at
-            const dias = countBusinessDays(dataInicio, dataFim)
-            categories[cat].somaDiasUteis += dias
-            categories[cat].qtdResolvidosComData++
+            const dataFim = getResolvedAt(ticket)
+            if (dataFim) {
+              const dias = countBusinessDays(ticket.created_at, dataFim)
+              categories[cat].somaDiasUteis += dias
+              categories[cat].qtdResolvidosComData++
+            }
         }
     })
     return categories

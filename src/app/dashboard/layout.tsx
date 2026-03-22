@@ -11,7 +11,7 @@ export default function DashboardLayout({
       <Sidebar />
       
       {/* Conteúdo Principal (empurrado para a direita) */}
-      <main className="flex-1 ml-64 p-8">
+      <main className="flex-1 ml-64 p-3">
         {children}
       </main>
     </div>

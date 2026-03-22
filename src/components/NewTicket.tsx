@@ -158,7 +158,7 @@ export function NewTicket() {
       }
       else if (category === "Emissão de Documento") {
         finalTitle = `Doc: ${formData.tipo_emissao}`
-        description = `Solicitação de emissão de: ${formData.tipo_emissao}. \nObs: ${formData.description || '-'}`
+        description = formData.description || '-'
       }
       else if (category === "Solicitação de Pagamento") {
         finalTitle = `Pagamento: ${formData.beneficiario || 'Diversos'} - R$ ${formData.valor || '0,00'}`

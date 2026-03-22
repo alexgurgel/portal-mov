@@ -1,12 +1,12 @@
 'use client'
 import Link from "next/link"
 import { useSearchParams, useRouter, usePathname } from "next/navigation"
-import { 
-  LayoutDashboard, 
-  ShoppingCart, 
-  FileText, 
-  Users, 
-  Package, 
+import {
+  LayoutDashboard,
+  ShoppingCart,
+  FileText,
+  Users,
+  Package,
   Truck,
   FileSignature,
   LogOut,
@@ -14,7 +14,8 @@ import {
   Banknote,
   Receipt,
   AlertTriangle,
-  BarChart3 // Ícone novo para Indicadores
+  BarChart3,
+  Bug
 } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { useState, useEffect } from "react"
@@ -52,9 +53,8 @@ export function Sidebar() {
 
   const menus = [
     { name: "Visão Geral", icon: LayoutDashboard, href: "/dashboard" },
-    
-    // NOVO MENU DE INDICADORES
     { name: "Indicadores / SLA", icon: BarChart3, href: "/dashboard/indicadores" },
+    { name: "Suporte / Melhorias", icon: Bug, href: "/dashboard/suporte" },
 
     { name: "Nova Locação", icon: Truck, href: "/dashboard?sector=Nova Locação" },
     { name: "Compra", icon: ShoppingCart, href: "/dashboard?sector=Compra" },
@@ -89,7 +89,8 @@ export function Sidebar() {
                 (item.href === "/dashboard" && pathname === "/dashboard" && !currentSector) || 
                 (item.href === `/dashboard?sector=${currentSector}`) || 
                 (item.href === pathname && pathname === "/controle-relatorio") ||
-                (item.href === pathname && pathname === "/dashboard/indicadores") // Ativa na página nova
+                (item.href === pathname && pathname === "/dashboard/indicadores") ||
+                (item.href === pathname && pathname === "/dashboard/suporte")
 
             return (
                 <Link 
