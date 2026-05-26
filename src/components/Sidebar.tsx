@@ -15,7 +15,8 @@ import {
   Receipt,
   AlertTriangle,
   BarChart3,
-  Bug
+  Bug,
+  RotateCcw // Ícone novo adicionado para a Devolução
 } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { useState, useEffect } from "react"
@@ -56,6 +57,8 @@ export function Sidebar() {
     { name: "Indicadores / SLA", icon: BarChart3, href: "/dashboard/indicadores" },
 
     { name: "Nova Locação", icon: Truck, href: "/dashboard?sector=Nova Locação" },
+    // --- NOVO MENU ADICIONADO AQUI ---
+    { name: "Devolução Locação", icon: RotateCcw, href: "/dashboard?sector=Devolução Locação" },
     { name: "Compra", icon: ShoppingCart, href: "/dashboard?sector=Compra" },
     { name: "Cotação", icon: FileText, href: "/dashboard?sector=Cotação" },
     { name: "Solicitação Pagamento", icon: Banknote, href: "/dashboard?sector=Solicitação de Pagamento" },

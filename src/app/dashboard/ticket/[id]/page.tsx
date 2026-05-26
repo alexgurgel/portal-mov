@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dialog"
 import { 
     CheckCircle2, AlertCircle, Clock, DownloadCloud, 
-    Undo2, AlertTriangle, UploadCloud, Paperclip, XCircle 
+    Undo2, AlertTriangle, UploadCloud, Paperclip, XCircle, User 
 } from "lucide-react"
 
 export default function TicketDetails() {
@@ -25,6 +25,7 @@ export default function TicketDetails() {
   const router = useRouter()
   const [ticket, setTicket] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [currentUserName, setCurrentUserName] = useState("Usuário") // NOVO: Guarda quem está logado
 
   // Estados para a Baixa de Item (Sucesso)
   const [modalOpen, setModalOpen] = useState(false)
@@ -46,7 +47,15 @@ export default function TicketDetails() {
   const [obsGlobal, setObsGlobal] = useState("")
 
   useEffect(() => {
-    async function fetchTicket() {
+    async function fetchData() {
+      // 1. Busca quem está logado para registrar na ação
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const nome = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || "Usuário"
+        setCurrentUserName(nome.replace(/[._]/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()))
+      }
+
+      // 2. Busca os dados do ticket
       if (!params.id) return
       
       const { data, error } = await supabase
@@ -62,7 +71,7 @@ export default function TicketDetails() {
       }
       setLoading(false)
     }
-    fetchTicket()
+    fetchData()
   }, [params.id])
 
   const sanitizeFileName = (name: string) => {
@@ -98,9 +107,10 @@ export default function TicketDetails() {
         const novosItens = [...ticket.custom_data.itens_tabela]
         novosItens[selectedItemIndex] = {
             ...novosItens[selectedItemIndex],
-            status: 'concluido', // STATUS DE SUCESSO
+            status: 'concluido', 
             resolucao: {
                 data_baixa: new Date().toISOString(),
+                responsavel: currentUserName, // NOVO: REGISTRA QUEM FEZ
                 ...resolutionData,
                 arquivo: dadosArquivo
             }
@@ -143,10 +153,11 @@ export default function TicketDetails() {
         const novosItens = [...ticket.custom_data.itens_tabela]
         novosItens[selectedItemIndex] = {
             ...novosItens[selectedItemIndex],
-            status: 'devolvido', // NOVO STATUS DE ITEM
+            status: 'devolvido', 
             resolucao: {
                 data_baixa: new Date().toISOString(),
-                motivo_devolucao: itemReturnReason
+                motivo_devolucao: itemReturnReason,
+                responsavel: currentUserName // NOVO: REGISTRA QUEM DEVOLVEU
             }
         }
 
@@ -173,7 +184,6 @@ export default function TicketDetails() {
       } catch (err: any) { alert(err.message) }
   }
 
-
   // --- LÓGICA GERAL (Ticket Inteiro) ---
   const handleOpenGlobalResolve = () => {
       setObsGlobal("")
@@ -191,7 +201,8 @@ export default function TicketDetails() {
             resolucao_global: {
                 data_resolucao: new Date().toISOString(),
                 obs: obsGlobal,
-                arquivo: dadosArquivo
+                arquivo: dadosArquivo,
+                responsavel: currentUserName // NOVO: REGISTRA QUEM RESOLVEU GLOBAL
             }
         }
 
@@ -210,7 +221,11 @@ export default function TicketDetails() {
 
   async function confirmarDevolucaoGlobal() {
       if (!returnReason.trim()) return alert("Por favor, explique o motivo da devolução.")
-      const novoCustomData = { ...ticket.custom_data, motivo_devolucao: returnReason }
+      const novoCustomData = { 
+        ...ticket.custom_data, 
+        motivo_devolucao: returnReason,
+        responsavel_devolucao: currentUserName // NOVO: REGISTRA QUEM DEVOLVEU GLOBAL
+      }
       const { error } = await supabase.from('tickets').update({ status: 'devolvida', custom_data: novoCustomData }).eq('id', ticket.id)
       if (!error) {
           setTicket({ ...ticket, status: 'devolvida', custom_data: novoCustomData })
@@ -264,6 +279,12 @@ export default function TicketDetails() {
                   <div>
                       <h3 className="font-bold text-orange-800">Solicitação Devolvida (Global)</h3>
                       <p className="text-orange-900 mt-1 font-medium">Motivo: "{ticket.custom_data.motivo_devolucao}"</p>
+                      {/* MOSTRA QUEM DEVOLVEU NO BANNER GLOBAL */}
+                      {ticket.custom_data.responsavel_devolucao && (
+                          <p className="text-orange-700 text-xs mt-2 flex items-center gap-1 font-semibold">
+                             <User size={12}/> Devolvido por: {ticket.custom_data.responsavel_devolucao}
+                          </p>
+                      )}
                   </div>
               </div>
           </div>
@@ -276,6 +297,12 @@ export default function TicketDetails() {
                   <div>
                       <h3 className="font-bold text-green-800">Solicitação Resolvida/Concluída</h3>
                       {resolucaoGlobal.obs && <p className="text-green-900 mt-1">{resolucaoGlobal.obs}</p>}
+                      {/* MOSTRA QUEM RESOLVEU NO BANNER GLOBAL */}
+                      {resolucaoGlobal.responsavel && (
+                          <p className="text-green-700 text-xs mt-2 flex items-center gap-1 font-semibold">
+                             <User size={12}/> Finalizado por: {resolucaoGlobal.responsavel}
+                          </p>
+                      )}
                       {resolucaoGlobal.arquivo && (
                           <div className="mt-3">
                               <a href={resolucaoGlobal.arquivo.url} target="_blank" rel="noopener noreferrer" 
@@ -310,7 +337,6 @@ export default function TicketDetails() {
                 <CardContent className="space-y-6">
                     <div className="bg-gray-50 p-4 rounded border">
                         <h3 className="text-xs font-bold text-gray-500 uppercase mb-2">Descrição Geral</h3>
-                        {/* AQUI ESTÁ A CORREÇÃO DA DESCRIÇÃO GERAL */}
                         <p className="whitespace-pre-wrap break-words">{ticket.description}</p>
                     </div>
 
@@ -341,7 +367,9 @@ export default function TicketDetails() {
                                             {isDone && (
                                                 <div className="text-green-700">
                                                     <span className="flex items-center gap-1 font-bold"><CheckCircle2 size={12}/> Concluído</span>
-                                                    {item.resolucao?.valor && <span>R$ {item.resolucao.valor}</span>}
+                                                    {/* MOSTRA QUEM BAIXOU O ITEM */}
+                                                    {item.resolucao?.responsavel && <span className="block text-[10px] text-green-600 font-semibold mt-0.5">por {item.resolucao.responsavel}</span>}
+                                                    {item.resolucao?.valor && <span className="block mt-1">R$ {item.resolucao.valor}</span>}
                                                     {item.resolucao?.oc && <span className="block">OC: {item.resolucao.oc}</span>}
                                                     {item.resolucao?.arquivo && (
                                                         <a href={item.resolucao.arquivo.url} target="_blank" className="flex items-center gap-1 text-blue-600 underline mt-1"><Paperclip size={10}/> Anexo</a>
@@ -351,6 +379,8 @@ export default function TicketDetails() {
                                             {isReturned && (
                                                 <div className="text-orange-700">
                                                     <span className="flex items-center gap-1 font-bold"><Undo2 size={12}/> Devolvido</span>
+                                                    {/* MOSTRA QUEM DEVOLVEU O ITEM */}
+                                                    {item.resolucao?.responsavel && <span className="block text-[10px] text-orange-600 font-semibold mt-0.5">por {item.resolucao.responsavel}</span>}
                                                     <span className="block mt-1 italic">"{item.resolucao?.motivo_devolucao}"</span>
                                                 </div>
                                             )}
@@ -378,11 +408,10 @@ export default function TicketDetails() {
                         </div>
                     )}
 
-                    {/* DADOS ADICIONAIS - CORREÇÃO DE OVERFLOW */}
                     {ticket.custom_data && (
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
                             {Object.entries(ticket.custom_data).map(([key, value]) => {
-                                if (['description', 'prioridade', 'itens_tabela', 'nome_arquivo_anexo', 'url_arquivo_anexo', 'motivo_devolucao', 'resolucao_global', 'anexos'].includes(key)) return null
+                                if (['description', 'prioridade', 'itens_tabela', 'nome_arquivo_anexo', 'url_arquivo_anexo', 'motivo_devolucao', 'resolucao_global', 'responsavel_devolucao', 'anexos'].includes(key)) return null
                                 if (!value) return null
                                 return (
                                     <div key={key} className="bg-white p-3 rounded border shadow-sm max-h-60 overflow-y-auto">

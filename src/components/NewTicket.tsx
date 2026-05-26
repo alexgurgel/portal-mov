@@ -103,7 +103,18 @@ export function NewTicket() {
     if (!requesterName) return alert("Por favor, informe o Nome do Solicitante.")
     if (!formData.prioridade) return alert("Por favor, selecione a Prioridade.")
 
-    const categoriasObrigatorias = ['Cadastro Fornecedor', 'Cadastro Cliente', 'Solicitação de Pagamento', 'Solicitação de Reembolso', 'Divergência']
+    // VALIDAÇÃO DE CAMPOS OBRIGATÓRIOS DO NOVO MENU
+    if (category === "Devolução Locação") {
+        if (!formData.cliente || !formData.pat || !formData.data_devolucao || !formData.nf_numero) {
+            return alert("Por favor, preencha todos os campos obrigatórios (Cliente, PAT, Data de Devolução e Nº Nota Fiscal).")
+        }
+    }
+
+    // ADICIONADO 'Devolução Locação' NAS CATEGORIAS COM ANEXO OBRIGATÓRIO
+    const categoriasObrigatorias = [
+        'Cadastro Fornecedor', 'Cadastro Cliente', 'Solicitação de Pagamento', 
+        'Solicitação de Reembolso', 'Divergência', 'Emissão de Documento', 'Devolução Locação'
+    ]
     if (categoriasObrigatorias.includes(category) && arquivosParaUpload.length === 0) {
         return alert(`É obrigatório anexar pelo menos um documento para ${category}.`)
     }
@@ -118,7 +129,6 @@ export function NewTicket() {
       }
       
       const userId = session.user.id
-
       const listaAnexosSalvos = []
 
       if (arquivosParaUpload.length > 0) {
@@ -141,7 +151,12 @@ export function NewTicket() {
       let finalTitle = title
       let description = formData.description || ""
 
-      if (category === "Nova Locação") {
+      // LÓGICA DE TÍTULO E DESCRIÇÃO PARA O NOVO MENU
+      if (category === "Devolução Locação") {
+          finalTitle = `Devolução Locação: ${formData.cliente} - PAT: ${formData.pat}`
+          description = `NF Nº: ${formData.nf_numero} | Data Devolução: ${formData.data_devolucao} | Valor Frete: R$ ${formData.valor_frete || '0,00'}\nObs: ${formData.description || '-'}`
+      }
+      else if (category === "Nova Locação") {
         finalTitle = `Locação: ${formData.cliente || "Cliente"} - ${formData.equipamento?.substring(0, 15) || ""}...`
       } 
       else if (category === "Cadastro Fornecedor" || category === "Cadastro Cliente") {
@@ -151,14 +166,13 @@ export function NewTicket() {
       else if (category === "Cadastro Mercadoria") {
         finalTitle = `Cadastro Item: ${formData.descricao_item}`
         description = `Cód: ${formData.codigo} | NCM: ${formData.ncm} | Valor: R$ ${formData.valor_item}`
-        // INCLUI A OBSERVAÇÃO NA DESCRIÇÃO PRINCIPAL (Se existir)
         if (formData.observacao) {
             description += ` | Obs: ${formData.observacao}`
         }
       }
       else if (category === "Emissão de Documento") {
         finalTitle = `Doc: ${formData.tipo_emissao}`
-        description = formData.description || '-'
+        description = `Solicitação de emissão de: ${formData.tipo_emissao}. \nObs: ${formData.description || '-'}`
       }
       else if (category === "Solicitação de Pagamento") {
         finalTitle = `Pagamento: ${formData.beneficiario || 'Diversos'} - R$ ${formData.valor || '0,00'}`
@@ -187,7 +201,7 @@ export function NewTicket() {
         requester_name: requesterName,
         custom_data: {
           ...formData,
-          itens_tabela: items,
+          itens_tabela: category === "Compra" || category === "Cotação" ? items : null,
           anexos: listaAnexosSalvos,
           nome_arquivo_anexo: listaAnexosSalvos[0]?.nome || "",
           url_arquivo_anexo: listaAnexosSalvos[0]?.url || ""
@@ -242,6 +256,23 @@ export function NewTicket() {
 
   const renderFields = () => {
     switch (category) {
+      // --- VISUAL E CAMPOS DO NOVO MENU ---
+      case "Devolução Locação":
+        return (
+            <div className="grid gap-3 border p-4 rounded-md bg-amber-50/60 border-amber-200">
+                <h3 className="font-bold text-sm text-amber-900">Dados da Devolução de Locação</h3>
+                <div className="grid grid-cols-2 gap-3">
+                    <div><Label className="font-bold">Cliente *</Label><Input className="bg-white" placeholder="Nome do cliente" onChange={e => updateForm('cliente', e.target.value)} /></div>
+                    <div><Label className="font-bold">PAT *</Label><Input className="bg-white" placeholder="Número do PAT" onChange={e => updateForm('pat', e.target.value)} /></div>
+                    <div><Label className="font-bold">Data de Devolução *</Label><Input className="bg-white" type="date" onChange={e => updateForm('data_devolucao', e.target.value)} /></div>
+                    <div><Label className="font-bold">Nº Nota Fiscal *</Label><Input className="bg-white" placeholder="Número da NF" onChange={e => updateForm('nf_numero', e.target.value)} /></div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                    <div><Label className="font-bold">Valor do Frete</Label><Input className="bg-white" type="number" step="0.01" placeholder="0,00 (Se houver)" onChange={e => updateForm('valor_frete', e.target.value)} /></div>
+                </div>
+                <div><Label className="font-bold">Observações</Label><Textarea className="bg-white" placeholder="Detalhes ou observações sobre a devolução da máquina/bateria..." onChange={e => updateForm('description', e.target.value)} /></div>
+            </div>
+        )
       case "Nova Locação":
         return (
           <div className="grid gap-3 border p-4 rounded-md bg-gray-50">
@@ -328,7 +359,7 @@ export function NewTicket() {
                 <h3 className="font-bold text-sm text-blue-900">Dados Cadastrais</h3>
                 {category === "Cadastro Cliente" && (
                     <div className="bg-yellow-100 p-2 text-xs text-yellow-800 rounded border border-yellow-200 font-semibold">
-                        ⚠️ Observação: Solicitação para análise de crédito e cadastro.
+                        ⚠️ Observação: Cadastro só pode ser solicitado após análise de crédito aprovada.
                     </div>
                 )}
                 <div className="grid gap-2"><Label>Razão Social / Nome</Label><Input onChange={e => updateForm('razao_social', e.target.value)} /></div>
@@ -366,12 +397,8 @@ export function NewTicket() {
                             <SelectItem value="Almoxarifado">Almoxarifado (Peças/Insumos)</SelectItem>
                         </SelectContent>
                     </Select>
-                    <p className="text-[10px] text-gray-500 mt-1">
-                        * Revenda: Venda externa. Frota: Uso interno. Almox: Estoque de manutenção.
-                    </p>
                 </div>
 
-                {/* --- NOVO CAMPO DE OBSERVAÇÃO --- */}
                 <div className="mt-2 border-t border-purple-100 pt-2">
                     <Label>Observação</Label>
                     <Textarea 
@@ -411,7 +438,6 @@ export function NewTicket() {
         <div className="grid gap-4 py-4">
           <div className="bg-slate-100 p-3 rounded border">
             <Label className="font-bold text-gray-700">Nome do Solicitante *</Label>
-            
             <Input 
                 value={requesterName} 
                 onChange={e => setRequesterName(e.target.value)} 
@@ -429,6 +455,8 @@ export function NewTicket() {
                     <SelectContent>
                         <SelectItem value="Geral">Geral</SelectItem>
                         <SelectItem value="Nova Locação">Nova Locação</SelectItem>
+                        {/* ADICIONADO OPÇÃO NO DROP DOWN */}
+                        <SelectItem value="Devolução Locação">Devolução Locação</SelectItem>
                         <SelectItem value="Compra">Compra</SelectItem>
                         <SelectItem value="Cotação">Cotação</SelectItem>
                         <SelectItem value="Solicitação de Pagamento">Solicitação de Pagamento</SelectItem>
@@ -456,6 +484,8 @@ export function NewTicket() {
           {renderFields()}
 
           <div className="border-t pt-4 mt-2 bg-gray-50 p-3 rounded border-dashed border border-gray-300">
+            {/* TRAVA E BANNER VISUAL DE OBRIGATORIEDADE DE ANEXO */}
+            {category === "Devolução Locação" && <div className="bg-amber-100 p-2 text-[11px] text-amber-800 rounded mb-2 border border-amber-200 font-bold">⚠️ Obrigatório: Anexar a Nota Fiscal de Devolução e comprovantes de coleta.</div>}
             {category === "Nova Locação" && <div className="bg-amber-100 p-2 text-[11px] text-amber-800 rounded mb-2 border border-amber-200 font-bold">⚠️ Obrigatório: Cartão CNPJ, Dados Cadastrais, Proposta e docs relevantes.</div>}
             {(category === "Cadastro Cliente" || category === "Cadastro Fornecedor") && <div className="bg-blue-100 p-2 text-[11px] text-blue-800 rounded mb-2 border border-blue-200 font-bold">⚠️ Obrigatório anexar o Cartão CNPJ aqui.</div>}
             {category === "Solicitação de Pagamento" && <div className="bg-emerald-100 p-2 text-[11px] text-emerald-800 rounded mb-2 border border-emerald-200 font-bold">⚠️ Obrigatório anexar o Boleto ou Nota Fiscal.</div>}
@@ -464,7 +494,6 @@ export function NewTicket() {
             {category === "Divergência" && <div className="bg-orange-100 p-2 text-[11px] text-orange-800 rounded mb-2 border border-orange-200 font-bold">⚠️ Se possível, anexe foto ou evidência da divergência.</div>}
 
             <Label className="mb-2 block font-semibold flex items-center gap-2"><UploadCloud size={16}/> Anexar Arquivos</Label>
-            
             <div className="flex gap-2 mb-3">
                 <Input type="file" multiple className="cursor-pointer bg-white" onChange={handleFileChange} />
             </div>
