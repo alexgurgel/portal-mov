@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dialog"
 import { 
     CheckCircle2, AlertCircle, Clock, DownloadCloud, 
-    Undo2, AlertTriangle, UploadCloud, Paperclip, XCircle, User 
+    Undo2, AlertTriangle, UploadCloud, Paperclip, XCircle, User, FastForward 
 } from "lucide-react"
 
 export default function TicketDetails() {
@@ -25,37 +25,31 @@ export default function TicketDetails() {
   const router = useRouter()
   const [ticket, setTicket] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [currentUserName, setCurrentUserName] = useState("Usuário") // NOVO: Guarda quem está logado
+  const [currentUserName, setCurrentUserName] = useState("Usuário") 
 
-  // Estados para a Baixa de Item (Sucesso)
   const [modalOpen, setModalOpen] = useState(false)
   const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null)
   const [resolutionData, setResolutionData] = useState({ valor: '', oc: '', previsao: '' })
   const [arquivoBaixa, setArquivoBaixa] = useState<File | null>(null)
 
-  // Estados para Devolução de ITEM (Parcial)
   const [modalItemReturnOpen, setModalItemReturnOpen] = useState(false)
   const [itemReturnReason, setItemReturnReason] = useState("")
 
-  // Estados para Devolução GLOBAL (Ticket inteiro)
   const [returnModalOpen, setReturnModalOpen] = useState(false)
   const [returnReason, setReturnReason] = useState("")
 
-  // Estados para Resolução GLOBAL
   const [globalResolveModalOpen, setGlobalResolveModalOpen] = useState(false)
   const [arquivoGlobal, setArquivoGlobal] = useState<File | null>(null)
   const [obsGlobal, setObsGlobal] = useState("")
 
   useEffect(() => {
     async function fetchData() {
-      // 1. Busca quem está logado para registrar na ação
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         const nome = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || "Usuário"
         setCurrentUserName(nome.replace(/[._]/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()))
       }
 
-      // 2. Busca os dados do ticket
       if (!params.id) return
       
       const { data, error } = await supabase
@@ -87,7 +81,6 @@ export default function TicketDetails() {
       return { url: data.publicUrl, nome: nomeLimpo }
   }
 
-  // --- LÓGICA: BAIXAR ITEM (SUCESSO) ---
   const abrirModalBaixa = (index: number) => {
     setSelectedItemIndex(index)
     setResolutionData({ valor: '', oc: '', previsao: '' }) 
@@ -110,7 +103,7 @@ export default function TicketDetails() {
             status: 'concluido', 
             resolucao: {
                 data_baixa: new Date().toISOString(),
-                responsavel: currentUserName, // NOVO: REGISTRA QUEM FEZ
+                responsavel: currentUserName, 
                 ...resolutionData,
                 arquivo: dadosArquivo
             }
@@ -138,7 +131,6 @@ export default function TicketDetails() {
     } catch (err: any) { alert(err.message) }
   }
 
-  // --- LÓGICA: DEVOLVER ITEM (PARCIAL) ---
   const abrirModalDevolucaoItem = (index: number) => {
       setSelectedItemIndex(index)
       setItemReturnReason("")
@@ -157,7 +149,7 @@ export default function TicketDetails() {
             resolucao: {
                 data_baixa: new Date().toISOString(),
                 motivo_devolucao: itemReturnReason,
-                responsavel: currentUserName // NOVO: REGISTRA QUEM DEVOLVEU
+                responsavel: currentUserName 
             }
         }
 
@@ -184,14 +176,40 @@ export default function TicketDetails() {
       } catch (err: any) { alert(err.message) }
   }
 
-  // --- LÓGICA GERAL (Ticket Inteiro) ---
   const handleOpenGlobalResolve = () => {
       setObsGlobal("")
       setArquivoGlobal(null)
       setGlobalResolveModalOpen(true)
   }
 
+  // --- LÓGICA DE AVANÇAR FASE (GESTAO DE CONTRATO -> FATURAMENTO) ---
+  const confirmarAvancoFase = async () => {
+      try {
+          const novoCustomData = {
+              ...ticket.custom_data,
+              fase_atual: 2,
+              responsavel_fase1: currentUserName,
+              data_fase1: new Date().toISOString()
+          }
+
+          const { error } = await supabase.from('tickets').update({ custom_data: novoCustomData }).eq('id', ticket.id)
+
+          if (!error) {
+              setTicket({ ...ticket, custom_data: novoCustomData })
+              alert("Gestão de Contratos validada com sucesso! O chamado avançou para a Fase 2 (Faturamento).")
+          } else {
+              alert("Erro ao avançar fase.")
+          }
+      } catch (err: any) { alert(err.message) }
+  }
+
+  // --- LÓGICA DE CONCLUIR DEFINITIVO (FASE 2 E GERAL) ---
   async function confirmarResolucaoGlobal() {
+    // TRAVA DE SEGURANÇA: Obriga o Faturamento a anexar o arquivo na Fase 2
+    if (ticket?.category === "Devolução Locação" && !arquivoGlobal) {
+        return alert("Erro: É obrigatório anexar o documento/faturamento emitido para concluir o ticket!")
+    }
+
     try {
         let dadosArquivo = null
         if (arquivoGlobal) dadosArquivo = await uploadFile(arquivoGlobal)
@@ -202,7 +220,7 @@ export default function TicketDetails() {
                 data_resolucao: new Date().toISOString(),
                 obs: obsGlobal,
                 arquivo: dadosArquivo,
-                responsavel: currentUserName // NOVO: REGISTRA QUEM RESOLVEU GLOBAL
+                responsavel: currentUserName 
             }
         }
 
@@ -221,12 +239,15 @@ export default function TicketDetails() {
 
   async function confirmarDevolucaoGlobal() {
       if (!returnReason.trim()) return alert("Por favor, explique o motivo da devolução.")
+      
       const novoCustomData = { 
         ...ticket.custom_data, 
         motivo_devolucao: returnReason,
-        responsavel_devolucao: currentUserName // NOVO: REGISTRA QUEM DEVOLVEU GLOBAL
+        responsavel_devolucao: currentUserName 
       }
+      
       const { error } = await supabase.from('tickets').update({ status: 'devolvida', custom_data: novoCustomData }).eq('id', ticket.id)
+      
       if (!error) {
           setTicket({ ...ticket, status: 'devolvida', custom_data: novoCustomData })
           setReturnModalOpen(false)
@@ -247,9 +268,11 @@ export default function TicketDetails() {
   const anexoUnico = ticket.custom_data?.url_arquivo_anexo ? [{ nome: ticket.custom_data.nome_arquivo_anexo || 'Arquivo', url: ticket.custom_data.url_arquivo_anexo }] : []
   const listaExibicao = anexos.length > 0 ? anexos : anexoUnico
 
-  // Pendencia agora considera itens que não são concluidos NEM devolvidos
   const pendencias = itensTabela?.filter((i: any) => i.status !== 'concluido' && i.status !== 'devolvido').length || 0
   const resolucaoGlobal = ticket.custom_data?.resolucao_global
+
+  const isDevolucaoLocacao = ticket.category === "Devolução Locação"
+  const faseAtual = ticket.custom_data?.fase_atual || 1
 
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">
@@ -271,7 +294,28 @@ export default function TicketDetails() {
         </div>
       </div>
 
-      {/* BANNERS DE STATUS GLOBAL */}
+      {/* BANNER DE FASE (DEVOLUÇÃO LOCAÇÃO) */}
+      {isDevolucaoLocacao && ticket.status !== 'resolvido' && ticket.status !== 'devolvida' && (
+          <div className={`p-4 rounded shadow-sm border-l-4 ${faseAtual === 1 ? 'bg-amber-50 border-amber-500' : 'bg-blue-50 border-blue-500'}`}>
+              <div className="flex items-start gap-3">
+                  <FastForward className={faseAtual === 1 ? 'text-amber-600' : 'text-blue-600'} />
+                  <div>
+                      <h3 className={`font-bold ${faseAtual === 1 ? 'text-amber-800' : 'text-blue-800'}`}>
+                          Fase Atual: {faseAtual === 1 ? '1 - Gestão de Contratos (Validação)' : '2 - Faturamento (Lançar Documento)'}
+                      </h3>
+                      <p className={`text-sm mt-1 ${faseAtual === 1 ? 'text-amber-900' : 'text-blue-900'}`}>
+                          {faseAtual === 1 ? 'O setor de Contratos precisa validar as informações antes de liberar para o faturamento.' : 'Contrato validado! O setor de Faturamento deve anexar o documento fiscal para concluir.'}
+                      </p>
+                      {faseAtual === 2 && ticket.custom_data?.responsavel_fase1 && (
+                          <p className="text-xs text-blue-700 mt-2 font-semibold">
+                              ✓ Fase 1 validada e liberada por: {ticket.custom_data.responsavel_fase1}
+                          </p>
+                      )}
+                  </div>
+              </div>
+          </div>
+      )}
+
       {ticket.status === 'devolvida' && ticket.custom_data?.motivo_devolucao && (
           <div className="bg-orange-50 border-l-4 border-orange-500 p-4 rounded shadow-sm">
               <div className="flex items-start gap-3">
@@ -279,10 +323,9 @@ export default function TicketDetails() {
                   <div>
                       <h3 className="font-bold text-orange-800">Solicitação Devolvida (Global)</h3>
                       <p className="text-orange-900 mt-1 font-medium">Motivo: "{ticket.custom_data.motivo_devolucao}"</p>
-                      {/* MOSTRA QUEM DEVOLVEU NO BANNER GLOBAL */}
                       {ticket.custom_data.responsavel_devolucao && (
                           <p className="text-orange-700 text-xs mt-2 flex items-center gap-1 font-semibold">
-                             <User size={12}/> Devolvido por: {ticket.custom_data.responsavel_devolucao}
+                             <User size={14}/> Devolvido por: {ticket.custom_data.responsavel_devolucao}
                           </p>
                       )}
                   </div>
@@ -297,10 +340,9 @@ export default function TicketDetails() {
                   <div>
                       <h3 className="font-bold text-green-800">Solicitação Resolvida/Concluída</h3>
                       {resolucaoGlobal.obs && <p className="text-green-900 mt-1">{resolucaoGlobal.obs}</p>}
-                      {/* MOSTRA QUEM RESOLVEU NO BANNER GLOBAL */}
                       {resolucaoGlobal.responsavel && (
                           <p className="text-green-700 text-xs mt-2 flex items-center gap-1 font-semibold">
-                             <User size={12}/> Finalizado por: {resolucaoGlobal.responsavel}
+                             <User size={14}/> Finalizado por: {resolucaoGlobal.responsavel}
                           </p>
                       )}
                       {resolucaoGlobal.arquivo && (
@@ -319,7 +361,6 @@ export default function TicketDetails() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="md:col-span-3 space-y-6">
             
-            {/* ALERTAS DE ITENS */}
             {ticket.status !== 'resolvido' && ticket.status !== 'devolvida' && itensTabela && (
                 <div className={`p-4 rounded-md flex items-center gap-3 ${pendencias > 0 ? 'bg-blue-50 border border-blue-200' : 'bg-green-50 border border-green-200'}`}>
                     {pendencias > 0 ? <Clock className="text-blue-500" /> : <CheckCircle2 className="text-green-500" />}
@@ -340,7 +381,6 @@ export default function TicketDetails() {
                         <p className="whitespace-pre-wrap break-words">{ticket.description}</p>
                     </div>
 
-                    {/* TABELA DE ITENS */}
                     {itensTabela && Array.isArray(itensTabela) && itensTabela.length > 0 && (
                         <div className="border rounded overflow-hidden">
                             <div className="bg-gray-100 p-3 text-xs font-bold text-gray-700 border-b grid grid-cols-12 gap-4 items-center">
@@ -362,13 +402,11 @@ export default function TicketDetails() {
                                         <div className="col-span-1 text-center font-bold bg-gray-100 rounded p-1">{item.qtd}</div>
                                         <div className="col-span-2 text-xs text-gray-500 break-words">{item.aplicacao || '-'}</div>
                                         
-                                        {/* COLUNA DE STATUS DO ITEM */}
                                         <div className="col-span-2 text-xs">
                                             {isDone && (
                                                 <div className="text-green-700">
                                                     <span className="flex items-center gap-1 font-bold"><CheckCircle2 size={12}/> Concluído</span>
-                                                    {/* MOSTRA QUEM BAIXOU O ITEM */}
-                                                    {item.resolucao?.responsavel && <span className="block text-[10px] text-green-600 font-semibold mt-0.5">por {item.resolucao.responsavel}</span>}
+                                                    {item.resolucao?.responsavel && <span className="block text-[10px] text-green-600 font-bold mt-0.5 uppercase tracking-wide">por {item.resolucao.responsavel}</span>}
                                                     {item.resolucao?.valor && <span className="block mt-1">R$ {item.resolucao.valor}</span>}
                                                     {item.resolucao?.oc && <span className="block">OC: {item.resolucao.oc}</span>}
                                                     {item.resolucao?.arquivo && (
@@ -379,8 +417,7 @@ export default function TicketDetails() {
                                             {isReturned && (
                                                 <div className="text-orange-700">
                                                     <span className="flex items-center gap-1 font-bold"><Undo2 size={12}/> Devolvido</span>
-                                                    {/* MOSTRA QUEM DEVOLVEU O ITEM */}
-                                                    {item.resolucao?.responsavel && <span className="block text-[10px] text-orange-600 font-semibold mt-0.5">por {item.resolucao.responsavel}</span>}
+                                                    {item.resolucao?.responsavel && <span className="block text-[10px] text-orange-600 font-bold mt-0.5 uppercase tracking-wide">por {item.resolucao.responsavel}</span>}
                                                     <span className="block mt-1 italic">"{item.resolucao?.motivo_devolucao}"</span>
                                                 </div>
                                             )}
@@ -389,7 +426,6 @@ export default function TicketDetails() {
                                             )}
                                         </div>
 
-                                        {/* COLUNA DE AÇÃO */}
                                         <div className="col-span-2 text-center flex flex-col gap-2">
                                             {!isDone && !isReturned && ticket.status !== 'devolvida' && (
                                                 <>
@@ -411,12 +447,11 @@ export default function TicketDetails() {
                     {ticket.custom_data && (
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
                             {Object.entries(ticket.custom_data).map(([key, value]) => {
-                                if (['description', 'prioridade', 'itens_tabela', 'nome_arquivo_anexo', 'url_arquivo_anexo', 'motivo_devolucao', 'resolucao_global', 'responsavel_devolucao', 'anexos'].includes(key)) return null
+                                if (['description', 'prioridade', 'itens_tabela', 'nome_arquivo_anexo', 'url_arquivo_anexo', 'motivo_devolucao', 'resolucao_global', 'responsavel_devolucao', 'anexos', 'fase_atual', 'responsavel_fase1', 'data_fase1', 'pats'].includes(key)) return null
                                 if (!value) return null
                                 return (
                                     <div key={key} className="bg-white p-3 rounded border shadow-sm max-h-60 overflow-y-auto">
                                         <span className="block text-[10px] font-bold text-gray-400 uppercase">{formatKey(key)}</span>
-                                        {/* AQUI ESTÁ A CORREÇÃO: break-words e whitespace-pre-wrap */}
                                         <span className="font-medium text-sm break-words whitespace-pre-wrap">{String(value)}</span>
                                     </div>
                                 )
@@ -458,10 +493,23 @@ export default function TicketDetails() {
                         <Button variant="outline" onClick={() => setReturnModalOpen(true)} className="border-orange-200 text-orange-700 hover:bg-orange-50 hover:text-orange-800 gap-2">
                             <Undo2 size={16} /> Devolver Tudo
                         </Button>
+                        
                         {(!itensTabela || itensTabela.length === 0) && (
-                            <Button onClick={handleOpenGlobalResolve} className="bg-green-600 hover:bg-green-700 text-white gap-2">
-                                <CheckCircle2 size={16} /> Resolver Solicitação
-                            </Button>
+                            isDevolucaoLocacao ? (
+                                faseAtual === 1 ? (
+                                    <Button onClick={confirmarAvancoFase} className="bg-amber-600 hover:bg-amber-700 text-white gap-2 font-bold shadow-md">
+                                        <CheckCircle2 size={16} /> Validar Gestão de Contrato (Avançar para Fase 2)
+                                    </Button>
+                                ) : (
+                                    <Button onClick={handleOpenGlobalResolve} className="bg-blue-600 hover:bg-blue-700 text-white gap-2 font-bold shadow-md">
+                                        <UploadCloud size={16} /> Anexar Documento e Concluir Devolução
+                                    </Button>
+                                )
+                            ) : (
+                                <Button onClick={handleOpenGlobalResolve} className="bg-green-600 hover:bg-green-700 text-white gap-2">
+                                    <CheckCircle2 size={16} /> Resolver Solicitação
+                                </Button>
+                            )
                         )}
                     </>
                 )}
@@ -469,14 +517,14 @@ export default function TicketDetails() {
         </div>
       </div>
 
-      {/* MODAL BAIXA ITEM */}
+      {/* MODAL 1: BAIXA DE ITEM */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent>
             <DialogHeader><DialogTitle>Baixar Item</DialogTitle></DialogHeader>
             <div className="py-4 space-y-4">
-                {ticket.category === 'Cotação' ? (
+                {ticket?.category === 'Cotação' ? (
                     <div><Label>Preço Fechado</Label><Input value={resolutionData.valor} onChange={e => setResolutionData({...resolutionData, valor: e.target.value})} /></div>
-                ) : ticket.category === 'Compras' ? (
+                ) : ticket?.category === 'Compras' ? (
                     <div className="grid gap-4">
                         <div><Label>O.C.</Label><Input value={resolutionData.oc} onChange={e => setResolutionData({...resolutionData, oc: e.target.value})} /></div>
                         <div><Label>Previsão</Label><Input type="date" value={resolutionData.previsao} onChange={e => setResolutionData({...resolutionData, previsao: e.target.value})} /></div>
@@ -496,7 +544,7 @@ export default function TicketDetails() {
         </DialogContent>
       </Dialog>
 
-      {/* MODAL DEVOLUÇÃO ITEM (PARCIAL) */}
+      {/* MODAL 2: DEVOLUÇÃO DE ITEM */}
       <Dialog open={modalItemReturnOpen} onOpenChange={setModalItemReturnOpen}>
         <DialogContent>
             <DialogHeader>
@@ -520,13 +568,21 @@ export default function TicketDetails() {
         </DialogContent>
       </Dialog>
 
-      {/* MODAL RESOLUÇÃO GLOBAL */}
+      {/* MODAL 3: RESOLUÇÃO GLOBAL / FASE 2 */}
       <Dialog open={globalResolveModalOpen} onOpenChange={setGlobalResolveModalOpen}>
         <DialogContent>
-            <DialogHeader><DialogTitle>Finalizar Solicitação</DialogTitle></DialogHeader>
+            <DialogHeader>
+                <DialogTitle>{isDevolucaoLocacao ? "Fase 2: Faturamento - Lançar Documento" : "Finalizar Solicitação"}</DialogTitle>
+            </DialogHeader>
             <div className="py-4 space-y-4">
                 <div><Label>Observações</Label><Textarea value={obsGlobal} onChange={e => setObsGlobal(e.target.value)} /></div>
-                <div className="border-t pt-4 mt-2"><Label className="flex items-center gap-2 mb-2 text-green-800 font-bold text-xs uppercase"><UploadCloud size={14}/> Anexar Arquivo Final</Label><Input type="file" onChange={e => setArquivoGlobal(e.target.files?.[0] || null)} /></div>
+                <div className="border-t pt-4 mt-2">
+                    <Label className="flex items-center gap-2 mb-2 text-green-800 font-bold text-xs uppercase">
+                        <UploadCloud size={14}/> Anexar Arquivo Final {isDevolucaoLocacao && "*"}
+                    </Label>
+                    <Input type="file" onChange={e => setArquivoGlobal(e.target.files?.[0] || null)} />
+                    {isDevolucaoLocacao && <p className="text-[11px] text-red-500 font-bold mt-1">* O anexo do documento/faturamento é obrigatório para concluir o chamado.</p>}
+                </div>
             </div>
             <DialogFooter>
                 <Button variant="outline" onClick={() => setGlobalResolveModalOpen(false)}>Cancelar</Button>
@@ -535,7 +591,7 @@ export default function TicketDetails() {
         </DialogContent>
       </Dialog>
 
-      {/* MODAL DEVOLUÇÃO GLOBAL */}
+      {/* MODAL 4: DEVOLUÇÃO GLOBAL */}
       <Dialog open={returnModalOpen} onOpenChange={setReturnModalOpen}>
         <DialogContent>
             <DialogHeader><DialogTitle>Devolver Solicitação Inteira</DialogTitle></DialogHeader>

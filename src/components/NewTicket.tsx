@@ -30,7 +30,10 @@ export function NewTicket() {
   const [category, setCategory] = useState("Geral")
   const [requesterName, setRequesterName] = useState("") 
   const [title, setTitle] = useState("") 
-  const [formData, setFormData] = useState<any>({ prioridade: 'media' })
+  
+  // ATENÇÃO AQUI: Iniciamos o formulário já com espaço para o primeiro PAT
+  const [formData, setFormData] = useState<any>({ prioridade: 'media', pats: [''] })
+  
   const [items, setItems] = useState([
     { codigo: '', descricao: '', qtd: 1, pat: '', aplicacao: '' }
   ])
@@ -61,7 +64,8 @@ export function NewTicket() {
             setCategory("Geral")
         }
 
-        setFormData({ prioridade: 'media' })
+        // Garante que toda vez que abrir a tela, o PAT esteja vazio e pronto para uso
+        setFormData({ prioridade: 'media', pats: [''] })
         setItems([{ codigo: '', descricao: '', qtd: 1, pat: '', aplicacao: '' }])
         setTitle("")
         setArquivosParaUpload([]) 
@@ -103,17 +107,19 @@ export function NewTicket() {
     if (!requesterName) return alert("Por favor, informe o Nome do Solicitante.")
     if (!formData.prioridade) return alert("Por favor, selecione a Prioridade.")
 
-    // VALIDAÇÃO DE CAMPOS OBRIGATÓRIOS DO NOVO MENU
+    // VALIDAÇÃO EXCLUSIVA PARA DEVOLUÇÃO LOCAÇÃO
     if (category === "Devolução Locação") {
-        if (!formData.cliente || !formData.pat || !formData.data_devolucao || !formData.nf_numero) {
-            return alert("Por favor, preencha todos os campos obrigatórios (Cliente, PAT, Data de Devolução e Nº Nota Fiscal).")
+        const patsList = formData.pats || []
+        const hasValidPat = patsList.some((p: string) => p.trim() !== "")
+        
+        if (!formData.cliente || !hasValidPat || !formData.data_devolucao || !formData.nf_numero) {
+            return alert("Por favor, preencha todos os campos obrigatórios (Cliente, ao menos 1 PAT, Data de Devolução e Nº Nota Fiscal).")
         }
     }
 
-    // ADICIONADO 'Devolução Locação' NAS CATEGORIAS COM ANEXO OBRIGATÓRIO
     const categoriasObrigatorias = [
-        'Cadastro Fornecedor', 'Cadastro Cliente', 'Solicitação de Pagamento', 
-        'Solicitação de Reembolso', 'Divergência', 'Emissão de Documento', 'Devolução Locação'
+      'Cadastro Fornecedor', 'Cadastro Cliente', 'Solicitação de Pagamento', 
+      'Solicitação de Reembolso', 'Divergência', 'Devolução Locação'
     ]
     if (categoriasObrigatorias.includes(category) && arquivosParaUpload.length === 0) {
         return alert(`É obrigatório anexar pelo menos um documento para ${category}.`)
@@ -151,10 +157,22 @@ export function NewTicket() {
       let finalTitle = title
       let description = formData.description || ""
 
-      // LÓGICA DE TÍTULO E DESCRIÇÃO PARA O NOVO MENU
+      // MONTAGEM DO TICKET DE DEVOLUÇÃO
       if (category === "Devolução Locação") {
-          finalTitle = `Devolução Locação: ${formData.cliente} - PAT: ${formData.pat}`
-          description = `NF Nº: ${formData.nf_numero} | Data Devolução: ${formData.data_devolucao} | Valor Frete: R$ ${formData.valor_frete || '0,00'}\nObs: ${formData.description || '-'}`
+        // Junta os PATs que foram digitados com vírgula
+        const patString = (formData.pats || []).filter((p: string) => p.trim() !== "").join(', ')
+        
+        finalTitle = `Devolução Locação: ${formData.cliente} - PAT(s): ${patString}`
+        description = `NF Nº: ${formData.nf_numero} | Data Devolução: ${formData.data_devolucao} | Valor Frete: R$ ${formData.valor_frete || '0,00'}`
+        
+        if (formData.nao_altera_contrato === 'SIM') {
+            description += `\n[ATENÇÃO: MARCADO COMO "NÃO ALTERA CONTRATO"]`
+        }
+        
+        description += `\nObs: ${formData.description || '-'}`
+        
+        // Salva a string formatada para o painel de detalhes ler depois
+        formData.pat = patString 
       }
       else if (category === "Nova Locação") {
         finalTitle = `Locação: ${formData.cliente || "Cliente"} - ${formData.equipamento?.substring(0, 15) || ""}...`
@@ -166,13 +184,11 @@ export function NewTicket() {
       else if (category === "Cadastro Mercadoria") {
         finalTitle = `Cadastro Item: ${formData.descricao_item}`
         description = `Cód: ${formData.codigo} | NCM: ${formData.ncm} | Valor: R$ ${formData.valor_item}`
-        if (formData.observacao) {
-            description += ` | Obs: ${formData.observacao}`
-        }
+        if (formData.observacao) description += ` | Obs: ${formData.observacao}`
       }
       else if (category === "Emissão de Documento") {
         finalTitle = `Doc: ${formData.tipo_emissao}`
-        description = `Solicitação de emissão de: ${formData.tipo_emissao}. \nObs: ${formData.description || '-'}`
+        description = formData.description || '-'
       }
       else if (category === "Solicitação de Pagamento") {
         finalTitle = `Pagamento: ${formData.beneficiario || 'Diversos'} - R$ ${formData.valor || '0,00'}`
@@ -201,6 +217,7 @@ export function NewTicket() {
         requester_name: requesterName,
         custom_data: {
           ...formData,
+          fase_atual: category === "Devolução Locação" ? 1 : undefined,
           itens_tabela: category === "Compra" || category === "Cotação" ? items : null,
           anexos: listaAnexosSalvos,
           nome_arquivo_anexo: listaAnexosSalvos[0]?.nome || "",
@@ -256,21 +273,78 @@ export function NewTicket() {
 
   const renderFields = () => {
     switch (category) {
-      // --- VISUAL E CAMPOS DO NOVO MENU ---
       case "Devolução Locação":
         return (
             <div className="grid gap-3 border p-4 rounded-md bg-amber-50/60 border-amber-200">
                 <h3 className="font-bold text-sm text-amber-900">Dados da Devolução de Locação</h3>
-                <div className="grid grid-cols-2 gap-3">
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div><Label className="font-bold">Cliente *</Label><Input className="bg-white" placeholder="Nome do cliente" onChange={e => updateForm('cliente', e.target.value)} /></div>
-                    <div><Label className="font-bold">PAT *</Label><Input className="bg-white" placeholder="Número do PAT" onChange={e => updateForm('pat', e.target.value)} /></div>
                     <div><Label className="font-bold">Data de Devolução *</Label><Input className="bg-white" type="date" onChange={e => updateForm('data_devolucao', e.target.value)} /></div>
                     <div><Label className="font-bold">Nº Nota Fiscal *</Label><Input className="bg-white" placeholder="Número da NF" onChange={e => updateForm('nf_numero', e.target.value)} /></div>
+                    <div><Label className="font-bold">Valor do Frete (R$)</Label><Input className="bg-white" type="number" step="0.01" placeholder="0,00 (Se houver)" onChange={e => updateForm('valor_frete', e.target.value)} /></div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                    <div><Label className="font-bold">Valor do Frete</Label><Input className="bg-white" type="number" step="0.01" placeholder="0,00 (Se houver)" onChange={e => updateForm('valor_frete', e.target.value)} /></div>
+
+                {/* --- AQUI ESTÁ A MÁGICA DOS PATS DINÂMICOS --- */}
+                <div className="bg-white p-3 rounded border border-amber-200 shadow-sm mt-1">
+                    <Label className="font-bold block mb-2 text-amber-900">Equipamentos (PATs) *</Label>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                        {(formData.pats || ['']).map((patValue: string, idx: number) => (
+                            <div key={idx} className="flex items-center gap-1">
+                                <Input 
+                                    className="bg-gray-50 h-8 text-sm font-semibold uppercase" 
+                                    placeholder="Ex: 0123" 
+                                    value={patValue} 
+                                    onChange={e => {
+                                        const newPats = [...(formData.pats || [''])]
+                                        newPats[idx] = e.target.value
+                                        updateForm('pats', newPats)
+                                    }} 
+                                />
+                                {idx === 0 ? (
+                                    <Button 
+                                        type="button" 
+                                        variant="outline" 
+                                        className="h-8 w-8 p-0 shrink-0 border-amber-300 text-amber-700 hover:bg-amber-100" 
+                                        onClick={() => updateForm('pats', [...(formData.pats || ['']), ''])}
+                                        title="Adicionar mais um PAT"
+                                    >
+                                        <Plus size={16} />
+                                    </Button>
+                                ) : (
+                                    <Button 
+                                        type="button" 
+                                        variant="outline" 
+                                        className="h-8 w-8 p-0 shrink-0 border-red-200 text-red-500 hover:bg-red-50" 
+                                        onClick={() => {
+                                            const newPats = [...formData.pats]
+                                            newPats.splice(idx, 1)
+                                            updateForm('pats', newPats)
+                                        }}
+                                        title="Remover este PAT"
+                                    >
+                                        <Trash2 size={16} />
+                                    </Button>
+                                )}
+                            </div>
+                        ))}
+                    </div>
                 </div>
-                <div><Label className="font-bold">Observações</Label><Textarea className="bg-white" placeholder="Detalhes ou observações sobre a devolução da máquina/bateria..." onChange={e => updateForm('description', e.target.value)} /></div>
+
+                {/* CHECKBOX DE NÃO ALTERA CONTRATO */}
+                <div className="flex items-center space-x-3 bg-white p-3 rounded border border-amber-300 mt-1">
+                    <input 
+                        type="checkbox" 
+                        id="nao_altera_contrato" 
+                        className="h-5 w-5 accent-amber-600 cursor-pointer" 
+                        onChange={e => updateForm('nao_altera_contrato', e.target.checked ? 'SIM' : 'NÃO')} 
+                    />
+                    <label htmlFor="nao_altera_contrato" className="text-sm font-extrabold text-amber-900 cursor-pointer select-none">
+                        NÃO ALTERA CONTRATO
+                    </label>
+                </div>
+
+                <div><Label className="font-bold">Observações</Label><Textarea className="bg-white" placeholder="Detalhes ou observações sobre a devolução..." onChange={e => updateForm('description', e.target.value)} /></div>
             </div>
         )
       case "Nova Locação":
@@ -359,7 +433,7 @@ export function NewTicket() {
                 <h3 className="font-bold text-sm text-blue-900">Dados Cadastrais</h3>
                 {category === "Cadastro Cliente" && (
                     <div className="bg-yellow-100 p-2 text-xs text-yellow-800 rounded border border-yellow-200 font-semibold">
-                        ⚠️ Observação: Cadastro só pode ser solicitado após análise de crédito aprovada.
+                        ⚠️ Observação: Solicitação para análise de crédito e cadastro.
                     </div>
                 )}
                 <div className="grid gap-2"><Label>Razão Social / Nome</Label><Input onChange={e => updateForm('razao_social', e.target.value)} /></div>
@@ -397,14 +471,13 @@ export function NewTicket() {
                             <SelectItem value="Almoxarifado">Almoxarifado (Peças/Insumos)</SelectItem>
                         </SelectContent>
                     </Select>
+                    <p className="text-[10px] text-gray-500 mt-1">
+                        * Revenda: Venda externa. Frota: Uso interno. Almox: Estoque de manutenção.
+                    </p>
                 </div>
-
                 <div className="mt-2 border-t border-purple-100 pt-2">
                     <Label>Observação</Label>
-                    <Textarea 
-                        onChange={e => updateForm('observacao', e.target.value)} 
-                        placeholder="Detalhes ou observações sobre a mercadoria..." 
-                    />
+                    <Textarea onChange={e => updateForm('observacao', e.target.value)} placeholder="Detalhes ou observações sobre a mercadoria..." />
                 </div>
             </div>
         )
@@ -438,13 +511,7 @@ export function NewTicket() {
         <div className="grid gap-4 py-4">
           <div className="bg-slate-100 p-3 rounded border">
             <Label className="font-bold text-gray-700">Nome do Solicitante *</Label>
-            <Input 
-                value={requesterName} 
-                onChange={e => setRequesterName(e.target.value)} 
-                placeholder="Carregando..." 
-                className="bg-white mt-1" 
-                required 
-            />
+            <Input value={requesterName} onChange={e => setRequesterName(e.target.value)} placeholder="Carregando..." className="bg-white mt-1" required />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -455,7 +522,6 @@ export function NewTicket() {
                     <SelectContent>
                         <SelectItem value="Geral">Geral</SelectItem>
                         <SelectItem value="Nova Locação">Nova Locação</SelectItem>
-                        {/* ADICIONADO OPÇÃO NO DROP DOWN */}
                         <SelectItem value="Devolução Locação">Devolução Locação</SelectItem>
                         <SelectItem value="Compra">Compra</SelectItem>
                         <SelectItem value="Cotação">Cotação</SelectItem>
@@ -484,7 +550,6 @@ export function NewTicket() {
           {renderFields()}
 
           <div className="border-t pt-4 mt-2 bg-gray-50 p-3 rounded border-dashed border border-gray-300">
-            {/* TRAVA E BANNER VISUAL DE OBRIGATORIEDADE DE ANEXO */}
             {category === "Devolução Locação" && <div className="bg-amber-100 p-2 text-[11px] text-amber-800 rounded mb-2 border border-amber-200 font-bold">⚠️ Obrigatório: Anexar a Nota Fiscal de Devolução e comprovantes de coleta.</div>}
             {category === "Nova Locação" && <div className="bg-amber-100 p-2 text-[11px] text-amber-800 rounded mb-2 border border-amber-200 font-bold">⚠️ Obrigatório: Cartão CNPJ, Dados Cadastrais, Proposta e docs relevantes.</div>}
             {(category === "Cadastro Cliente" || category === "Cadastro Fornecedor") && <div className="bg-blue-100 p-2 text-[11px] text-blue-800 rounded mb-2 border border-blue-200 font-bold">⚠️ Obrigatório anexar o Cartão CNPJ aqui.</div>}
@@ -493,7 +558,8 @@ export function NewTicket() {
             {category === "Emissão de Documento" && <div className="bg-green-100 p-2 text-[11px] text-green-800 rounded mb-2 border border-green-200 font-bold">⚠️ Obrigatório anexar a OV.</div>}
             {category === "Divergência" && <div className="bg-orange-100 p-2 text-[11px] text-orange-800 rounded mb-2 border border-orange-200 font-bold">⚠️ Se possível, anexe foto ou evidência da divergência.</div>}
 
-            <Label className="mb-2 block font-semibold flex items-center gap-2"><UploadCloud size={16}/> Anexar Arquivos</Label>
+            <Label className="mb-2 block font-semibold flex items-center gap-2"><UploadCloud size={16}/> Anexar Arquivos <span className="text-xs font-normal text-gray-500">(Segure CTRL para selecionar vários)</span></Label>
+            
             <div className="flex gap-2 mb-3">
                 <Input type="file" multiple className="cursor-pointer bg-white" onChange={handleFileChange} />
             </div>
