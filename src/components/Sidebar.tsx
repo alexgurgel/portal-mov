@@ -16,7 +16,9 @@ import {
   AlertTriangle,
   BarChart3,
   Bug,
-  RotateCcw // Ícone novo adicionado para a Devolução
+  RotateCcw, // Ícone novo adicionado para a Devolução
+  UserCog,
+  ListChecks
 } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { useState, useEffect } from "react"
@@ -27,12 +29,27 @@ export function Sidebar() {
   const currentSector = searchParams.get('sector')
   const router = useRouter()
   const [userEmail, setUserEmail] = useState("")
+  const [userRole, setUserRole] = useState("")
+  const [userDepartmentId, setUserDepartmentId] = useState<number | null>(null)
 
   useEffect(() => {
     async function getUser() {
       const { data: { user } } = await supabase.auth.getUser()
       if (user?.email) {
         setUserEmail(user.email)
+      }
+      if (user?.id) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role, department_id')
+          .eq('id', user.id)
+          .single()
+        if (profile?.role) {
+          setUserRole(profile.role)
+        }
+        if (profile?.department_id) {
+          setUserDepartmentId(profile.department_id)
+        }
       }
     }
     getUser()
@@ -72,10 +89,26 @@ export function Sidebar() {
   ]
 
   if (temAcessoEspecial) {
-    menus.push({ 
-        name: "Controle de Relatório", 
-        icon: ClipboardList, 
+    menus.push({
+        name: "Controle de Relatório",
+        icon: ClipboardList,
         href: "/controle-relatorio"
+    })
+  }
+
+  if (userRole === 'admin') {
+    menus.push({
+        name: "Usuários",
+        icon: UserCog,
+        href: "/dashboard/usuarios"
+    })
+  }
+
+  if (userDepartmentId) {
+    menus.splice(1, 0, {
+        name: "Pendentes para Mim",
+        icon: ListChecks,
+        href: "/dashboard/pendentes"
     })
   }
 
@@ -93,7 +126,9 @@ export function Sidebar() {
                 (item.href === `/dashboard?sector=${currentSector}`) || 
                 (item.href === pathname && pathname === "/controle-relatorio") ||
                 (item.href === pathname && pathname === "/dashboard/indicadores") ||
-                (item.href === pathname && pathname === "/dashboard/suporte")
+                (item.href === pathname && pathname === "/dashboard/suporte") ||
+                (item.href === pathname && pathname === "/dashboard/usuarios") ||
+                (item.href === pathname && pathname === "/dashboard/pendentes")
 
             return (
                 <Link 

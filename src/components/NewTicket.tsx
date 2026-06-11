@@ -22,6 +22,13 @@ import {
 } from "@/components/ui/select"
 import { Trash2, Plus, UploadCloud, X } from "lucide-react"
 
+const NAMED_UPLOAD_SLOTS_ESTAGIO1 = [
+  { key: 'proposta_locacao', label: 'Proposta de Locação' },
+  { key: 'contrato_social', label: 'Contrato Social' },
+  { key: 'ie_documento', label: 'IE (Inscrição Estadual)' },
+  { key: 'ficha_cadastro', label: 'Ficha de Cadastro' },
+]
+
 export function NewTicket() {
   const searchParams = useSearchParams()
   const [open, setOpen] = useState(false)
@@ -39,6 +46,7 @@ export function NewTicket() {
   ])
   
   const [arquivosParaUpload, setArquivosParaUpload] = useState<File[]>([])
+  const [namedUploads, setNamedUploads] = useState<Record<string, File | null>>({})
 
   useEffect(() => {
     async function fetchUser() {
@@ -68,7 +76,8 @@ export function NewTicket() {
         setFormData({ prioridade: 'media', pats: [''] })
         setItems([{ codigo: '', descricao: '', qtd: 1, pat: '', aplicacao: '' }])
         setTitle("")
-        setArquivosParaUpload([]) 
+        setArquivosParaUpload([])
+        setNamedUploads({})
     }
   }, [open, searchParams]) 
 
@@ -118,11 +127,24 @@ export function NewTicket() {
     }
 
     const categoriasObrigatorias = [
-      'Cadastro Fornecedor', 'Cadastro Cliente', 'Solicitação de Pagamento', 
+      'Cadastro Fornecedor', 'Cadastro Cliente', 'Solicitação de Pagamento',
       'Solicitação de Reembolso', 'Divergência', 'Devolução Locação'
     ]
     if (categoriasObrigatorias.includes(category) && arquivosParaUpload.length === 0) {
         return alert(`É obrigatório anexar pelo menos um documento para ${category}.`)
+    }
+
+    // VALIDAÇÃO EXCLUSIVA PARA NOVA LOCAÇÃO (Estágio 1 - Comercial)
+    if (category === "Nova Locação") {
+        const obrigatorios = ['cliente', 'cnpj', 'ie', 'endereco', 'contato']
+        const camposFaltando = obrigatorios.filter(f => !formData[f]?.trim())
+        if (camposFaltando.length > 0) {
+            return alert(`Preencha todos os campos obrigatórios do Estágio 1 (Cliente, CNPJ, IE, Endereço, Contato).`)
+        }
+        const slotsVazios = NAMED_UPLOAD_SLOTS_ESTAGIO1.filter(s => !namedUploads[s.key])
+        if (slotsVazios.length > 0) {
+            return alert(`Anexe todos os documentos do Estágio 1: ${slotsVazios.map(s => s.label).join(', ')}.`)
+        }
     }
 
     setLoading(true)
@@ -141,16 +163,35 @@ export function NewTicket() {
           for (const arquivo of arquivosParaUpload) {
               const nomeLimpo = sanitizeFileName(arquivo.name)
               const nomeArquivoUnico = `${Date.now()}-${nomeLimpo}`
-              
+
               const { error: errorUpload } = await supabase.storage.from('anexos').upload(nomeArquivoUnico, arquivo)
               if (errorUpload) throw new Error(`Erro ao enviar ${arquivo.name}: ` + errorUpload.message)
-              
+
               const { data: dataUrl } = supabase.storage.from('anexos').getPublicUrl(nomeArquivoUnico)
-              
+
               listaAnexosSalvos.push({
                   nome: nomeLimpo,
                   url: dataUrl.publicUrl
               })
+          }
+      }
+
+      // Upload dos 4 documentos nomeados do Estágio 1 (Nova Locação)
+      const documentosEstagio1: any = {}
+      if (category === "Nova Locação") {
+          for (const slot of NAMED_UPLOAD_SLOTS_ESTAGIO1) {
+              const arquivo = namedUploads[slot.key]
+              if (arquivo) {
+                  const nomeLimpo = sanitizeFileName(arquivo.name)
+                  const nomeArquivoUnico = `${Date.now()}-${nomeLimpo}`
+
+                  const { error: errorUpload } = await supabase.storage.from('anexos').upload(nomeArquivoUnico, arquivo)
+                  if (errorUpload) throw new Error(`Erro ao enviar ${slot.label}: ` + errorUpload.message)
+
+                  const { data: dataUrl } = supabase.storage.from('anexos').getPublicUrl(nomeArquivoUnico)
+
+                  documentosEstagio1[slot.key] = { nome: nomeLimpo, url: dataUrl.publicUrl }
+              }
           }
       }
 
@@ -175,8 +216,8 @@ export function NewTicket() {
         formData.pat = patString 
       }
       else if (category === "Nova Locação") {
-        finalTitle = `Locação: ${formData.cliente || "Cliente"} - ${formData.equipamento?.substring(0, 15) || ""}...`
-      } 
+        finalTitle = `Locação: ${formData.cliente || "Cliente"} - CNPJ ${formData.cnpj || "-"}`
+      }
       else if (category === "Cadastro Fornecedor" || category === "Cadastro Cliente") {
         finalTitle = `${category}: ${formData.razao_social || 'Novo Cadastro'}`
         description = `IE: ${formData.ie} | Email: ${formData.email} | Tel: ${formData.telefone}`
@@ -217,7 +258,9 @@ export function NewTicket() {
         requester_name: requesterName,
         custom_data: {
           ...formData,
-          fase_atual: category === "Devolução Locação" ? 1 : undefined,
+          fase_atual: (category === "Devolução Locação" || category === "Solicitação de Reembolso" || category === "Nova Locação") ? 1 : undefined,
+          documentos_estagio1: category === "Nova Locação" ? documentosEstagio1 : undefined,
+          historico_estagios: category === "Nova Locação" ? [] : undefined,
           itens_tabela: category === "Compra" || category === "Cotação" ? items : null,
           anexos: listaAnexosSalvos,
           nome_arquivo_anexo: listaAnexosSalvos[0]?.nome || "",
@@ -349,13 +392,37 @@ export function NewTicket() {
         )
       case "Nova Locação":
         return (
-          <div className="grid gap-3 border p-4 rounded-md bg-gray-50">
-             <div className="grid grid-cols-2 gap-2">
-                <div><Label>Cliente</Label><Input onChange={e => updateForm('cliente', e.target.value)} /></div>
-                <div><Label>CNPJ</Label><Input onChange={e => updateForm('cnpj', e.target.value)} /></div>
+          <div className="grid gap-3 border p-4 rounded-md bg-amber-50/60 border-amber-200">
+            <h3 className="font-bold text-sm text-amber-900">Estágio 1 — Comercial (Dados do Cliente)</h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div><Label className="font-bold">Cliente (Razão Social) *</Label><Input className="bg-white" onChange={e => updateForm('cliente', e.target.value)} /></div>
+              <div><Label className="font-bold">CNPJ *</Label><Input className="bg-white" onChange={e => updateForm('cnpj', e.target.value)} /></div>
+              <div><Label className="font-bold">Inscrição Estadual (IE) *</Label><Input className="bg-white" onChange={e => updateForm('ie', e.target.value)} /></div>
+              <div><Label className="font-bold">Endereço *</Label><Input className="bg-white" onChange={e => updateForm('endereco', e.target.value)} /></div>
+              <div><Label className="font-bold">Contato (Nome) *</Label><Input className="bg-white" onChange={e => updateForm('contato', e.target.value)} /></div>
+              <div><Label className="font-bold">Telefone do Contato</Label><Input className="bg-white" onChange={e => updateForm('telefone_contato', e.target.value)} /></div>
+              <div className="md:col-span-2"><Label className="font-bold">E-mail do Contato</Label><Input type="email" className="bg-white" onChange={e => updateForm('email_contato', e.target.value)} /></div>
             </div>
-            <div><Label>Equipamentos</Label><Textarea onChange={e => updateForm('equipamento', e.target.value)} /></div>
-            <div><Label>Local de Entrega</Label><Input onChange={e => updateForm('local', e.target.value)} /></div>
+
+            <div className="bg-white p-3 rounded border border-amber-200 shadow-sm mt-1 space-y-2">
+              <Label className="font-bold block text-amber-900">Documentos do Estágio 1 (todos obrigatórios) *</Label>
+              {NAMED_UPLOAD_SLOTS_ESTAGIO1.map(slot => (
+                <div key={slot.key} className="flex items-center justify-between gap-2 border rounded p-2">
+                  <div>
+                    <span className="text-sm font-medium block">{slot.label}</span>
+                    {namedUploads[slot.key] && (
+                      <span className="text-xs text-green-600">✓ {namedUploads[slot.key]!.name}</span>
+                    )}
+                  </div>
+                  <Input
+                    type="file"
+                    className="w-auto bg-white text-xs cursor-pointer"
+                    onChange={e => setNamedUploads(prev => ({ ...prev, [slot.key]: e.target.files?.[0] || null }))}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
         )
       case "Compra":
@@ -549,34 +616,35 @@ export function NewTicket() {
 
           {renderFields()}
 
-          <div className="border-t pt-4 mt-2 bg-gray-50 p-3 rounded border-dashed border border-gray-300">
-            {category === "Devolução Locação" && <div className="bg-amber-100 p-2 text-[11px] text-amber-800 rounded mb-2 border border-amber-200 font-bold">⚠️ Obrigatório: Anexar a Nota Fiscal de Devolução e comprovantes de coleta.</div>}
-            {category === "Nova Locação" && <div className="bg-amber-100 p-2 text-[11px] text-amber-800 rounded mb-2 border border-amber-200 font-bold">⚠️ Obrigatório: Cartão CNPJ, Dados Cadastrais, Proposta e docs relevantes.</div>}
-            {(category === "Cadastro Cliente" || category === "Cadastro Fornecedor") && <div className="bg-blue-100 p-2 text-[11px] text-blue-800 rounded mb-2 border border-blue-200 font-bold">⚠️ Obrigatório anexar o Cartão CNPJ aqui.</div>}
-            {category === "Solicitação de Pagamento" && <div className="bg-emerald-100 p-2 text-[11px] text-emerald-800 rounded mb-2 border border-emerald-200 font-bold">⚠️ Obrigatório anexar o Boleto ou Nota Fiscal.</div>}
-            {category === "Solicitação de Reembolso" && <div className="bg-indigo-100 p-2 text-[11px] text-indigo-800 rounded mb-2 border border-indigo-200 font-bold">⚠️ Obrigatório anexar o Comprovante/Recibo.</div>}
-            {category === "Emissão de Documento" && <div className="bg-green-100 p-2 text-[11px] text-green-800 rounded mb-2 border border-green-200 font-bold">⚠️ Obrigatório anexar a OV.</div>}
-            {category === "Divergência" && <div className="bg-orange-100 p-2 text-[11px] text-orange-800 rounded mb-2 border border-orange-200 font-bold">⚠️ Se possível, anexe foto ou evidência da divergência.</div>}
+          {category !== "Nova Locação" && (
+            <div className="border-t pt-4 mt-2 bg-gray-50 p-3 rounded border-dashed border border-gray-300">
+              {category === "Devolução Locação" && <div className="bg-amber-100 p-2 text-[11px] text-amber-800 rounded mb-2 border border-amber-200 font-bold">⚠️ Obrigatório: Anexar a Nota Fiscal de Devolução e comprovantes de coleta.</div>}
+              {(category === "Cadastro Cliente" || category === "Cadastro Fornecedor") && <div className="bg-blue-100 p-2 text-[11px] text-blue-800 rounded mb-2 border border-blue-200 font-bold">⚠️ Obrigatório anexar o Cartão CNPJ aqui.</div>}
+              {category === "Solicitação de Pagamento" && <div className="bg-emerald-100 p-2 text-[11px] text-emerald-800 rounded mb-2 border border-emerald-200 font-bold">⚠️ Obrigatório anexar o Boleto ou Nota Fiscal.</div>}
+              {category === "Solicitação de Reembolso" && <div className="bg-indigo-100 p-2 text-[11px] text-indigo-800 rounded mb-2 border border-indigo-200 font-bold">⚠️ Obrigatório anexar o Comprovante/Recibo.</div>}
+              {category === "Emissão de Documento" && <div className="bg-green-100 p-2 text-[11px] text-green-800 rounded mb-2 border border-green-200 font-bold">⚠️ Obrigatório anexar a OV.</div>}
+              {category === "Divergência" && <div className="bg-orange-100 p-2 text-[11px] text-orange-800 rounded mb-2 border border-orange-200 font-bold">⚠️ Se possível, anexe foto ou evidência da divergência.</div>}
 
-            <Label className="mb-2 block font-semibold flex items-center gap-2"><UploadCloud size={16}/> Anexar Arquivos <span className="text-xs font-normal text-gray-500">(Segure CTRL para selecionar vários)</span></Label>
-            
-            <div className="flex gap-2 mb-3">
-                <Input type="file" multiple className="cursor-pointer bg-white" onChange={handleFileChange} />
+              <Label className="mb-2 block font-semibold flex items-center gap-2"><UploadCloud size={16}/> Anexar Arquivos <span className="text-xs font-normal text-gray-500">(Segure CTRL para selecionar vários)</span></Label>
+
+              <div className="flex gap-2 mb-3">
+                  <Input type="file" multiple className="cursor-pointer bg-white" onChange={handleFileChange} />
+              </div>
+
+              {arquivosParaUpload.length > 0 && (
+                  <div className="space-y-2">
+                      {arquivosParaUpload.map((file, idx) => (
+                          <div key={idx} className="flex justify-between items-center bg-white p-2 rounded border text-sm">
+                              <span className="truncate max-w-[250px]">{file.name}</span>
+                              <Button variant="ghost" size="sm" onClick={() => removeFile(idx)} className="h-6 w-6 text-red-500 p-0">
+                                  <X size={14}/>
+                              </Button>
+                          </div>
+                      ))}
+                  </div>
+              )}
             </div>
-
-            {arquivosParaUpload.length > 0 && (
-                <div className="space-y-2">
-                    {arquivosParaUpload.map((file, idx) => (
-                        <div key={idx} className="flex justify-between items-center bg-white p-2 rounded border text-sm">
-                            <span className="truncate max-w-[250px]">{file.name}</span>
-                            <Button variant="ghost" size="sm" onClick={() => removeFile(idx)} className="h-6 w-6 text-red-500 p-0">
-                                <X size={14}/>
-                            </Button>
-                        </div>
-                    ))}
-                </div>
-            )}
-          </div>
+          )}
         </div>
 
         <Button onClick={handleSubmit} disabled={loading} className="w-full bg-black text-white hover:bg-gray-800">

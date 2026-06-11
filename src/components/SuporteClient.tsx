@@ -9,8 +9,8 @@ import { Label } from "@/components/ui/label"
 import { Bug, Lightbulb, Clock, CheckCircle, XCircle, ChevronUp, Send, MessageSquare } from "lucide-react"
 
 const VIVIANE_EMAIL = "viviane.lopes@grupomov.com.br"
-const ALEX_EMAIL = "alexgabrielb@hotmail.com"
-const CHAT_EMAILS = [VIVIANE_EMAIL, ALEX_EMAIL]
+const ALEX_EMAIL = "alexgabrielb@hotmail.com" // Alterado para o seu e-mail pessoal
+const ADMIN_EMAILS = [VIVIANE_EMAIL, ALEX_EMAIL] // Lista de Administradores
 
 type ChatMessage = {
   id: number
@@ -49,8 +49,9 @@ export default function SuporteClient() {
   const [sendingChat, setSendingChat] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
 
-  const isViviane = userEmail === VIVIANE_EMAIL
-  const hasChat = CHAT_EMAILS.includes(userEmail)
+  // Agora verifica se o usuário logado está na lista de administradores
+  const isAdmin = ADMIN_EMAILS.includes(userEmail)
+  const hasChat = ADMIN_EMAILS.includes(userEmail)
 
   useEffect(() => {
     async function init() {
@@ -60,8 +61,10 @@ export default function SuporteClient() {
         setUserId(user.id)
         const nome = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || ""
         setUserName(nome.replace(/[._]/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()))
+        
         await fetchReports()
-        if (CHAT_EMAILS.includes(user.email || "")) {
+        
+        if (ADMIN_EMAILS.includes(user.email || "")) {
           await fetchChat()
         }
       }
@@ -145,7 +148,6 @@ export default function SuporteClient() {
   }
 
   async function handleAprovar(report: BugReport) {
-    // Cria ticket na tabela tickets
     const { data: ticket, error: ticketError } = await supabase.from('tickets').insert({
       title: `[${report.type === 'bug' ? 'BUG' : 'MELHORIA'}] ${report.title}`,
       description: `${report.description}\n\n— Solicitado por: ${report.requester_name}`,
@@ -253,11 +255,11 @@ export default function SuporteClient() {
         </form>
       )}
 
-      {/* Painel de Aprovação (só Viviane) */}
-      {isViviane && pendentes.length > 0 && (
+      {/* Painel de Aprovação (Agora para todos os Admins) */}
+      {isAdmin && pendentes.length > 0 && (
         <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-5 shadow space-y-3">
           <h2 className="font-bold text-yellow-800 text-base flex items-center gap-2">
-            <Clock size={18} /> Aguardando sua aprovação ({pendentes.length})
+            <Clock size={18} /> Aguardando aprovação ({pendentes.length})
           </h2>
           {pendentes.map(report => (
             <div key={report.id} className="bg-white border border-yellow-200 rounded-lg p-4 space-y-2">
@@ -288,7 +290,7 @@ export default function SuporteClient() {
       <div className="bg-white rounded-lg shadow border overflow-hidden">
         <div className="px-5 py-3 border-b bg-gray-50">
           <h2 className="font-bold text-gray-700 text-sm">
-            {isViviane ? 'Todos os Relatos' : 'Meus Relatos'}
+            {isAdmin ? 'Todos os Relatos' : 'Meus Relatos'}
           </h2>
         </div>
 
@@ -302,7 +304,7 @@ export default function SuporteClient() {
               <tr>
                 <th className="px-4 py-3 w-[8%]">Tipo</th>
                 <th className="px-4 py-3 w-[35%]">Título</th>
-                {isViviane && <th className="px-4 py-3 w-[15%]">Solicitante</th>}
+                {isAdmin && <th className="px-4 py-3 w-[15%]">Solicitante</th>}
                 <th className="px-4 py-3">Descrição</th>
                 <th className="px-4 py-3 w-[12%]">Data</th>
                 <th className="px-4 py-3 w-[12%]">Status</th>
@@ -317,7 +319,7 @@ export default function SuporteClient() {
                     </span>
                   </td>
                   <td className="px-4 py-3 font-medium text-gray-900">{report.title}</td>
-                  {isViviane && <td className="px-4 py-3 text-gray-600 text-xs">{report.requester_name}</td>}
+                  {isAdmin && <td className="px-4 py-3 text-gray-600 text-xs">{report.requester_name}</td>}
                   <td className="px-4 py-3 text-xs text-gray-500 line-clamp-2">{report.description}</td>
                   <td className="px-4 py-3 text-gray-400 text-xs">{new Date(report.created_at).toLocaleDateString('pt-BR')}</td>
                   <td className="px-4 py-3">
@@ -337,13 +339,13 @@ export default function SuporteClient() {
         )}
       </div>
 
-      {/* CHAT - só para alex e viviane */}
+      {/* CHAT - só para admins */}
       {hasChat && (
         <div className="bg-white rounded-lg shadow border overflow-hidden">
           <div className="px-5 py-3 border-b bg-gray-50 flex items-center gap-2">
             <MessageSquare size={16} className="text-gray-600" />
             <h2 className="font-bold text-gray-700 text-sm">Chat Interno</h2>
-            <span className="text-xs text-gray-400 ml-1">— apenas você e Viviane</span>
+            <span className="text-xs text-gray-400 ml-1">— apenas para administração</span>
           </div>
 
           {/* Mensagens */}

@@ -15,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { getDisplayStatus } from "@/lib/ticketPhases"
 
 function DashboardContent() {
   const [tickets, setTickets] = useState<any[]>([])
@@ -80,16 +81,6 @@ function DashboardContent() {
       setStartDate("")
       setEndDate("")
       setStatusFilter("todos")
-  }
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'resolvido': return 'bg-green-100 text-green-700'
-      case 'em_andamento': return 'bg-yellow-100 text-yellow-700'
-      case 'concluido': return 'bg-blue-100 text-blue-700'
-      case 'devolvida': return 'bg-orange-100 text-orange-700'
-      default: return 'bg-gray-100 text-gray-700'
-    }
   }
 
   const getPriorityColor = (priority: string) => {
@@ -234,8 +225,8 @@ function DashboardContent() {
                                     {new Date(ticket.created_at).toLocaleDateString('pt-BR')}
                                 </td>
                                 <td className="px-4 py-4">
-                                    <span className={`text-xs font-bold px-2 py-1 rounded-full uppercase whitespace-nowrap ${getStatusColor(ticket.status)}`}>
-                                        {ticket.status ? ticket.status.replace('_', ' ') : '-'}
+                                    <span className={`text-xs font-bold px-2 py-1 rounded-full uppercase whitespace-nowrap ${getDisplayStatus(ticket).colorClass}`}>
+                                        {getDisplayStatus(ticket).label}
                                     </span>
                                 </td>
                             </tr>

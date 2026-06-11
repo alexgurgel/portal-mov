@@ -15,17 +15,30 @@ import {
   DialogFooter,
   DialogDescription
 } from "@/components/ui/dialog"
-import { 
-    CheckCircle2, AlertCircle, Clock, DownloadCloud, 
-    Undo2, AlertTriangle, UploadCloud, Paperclip, XCircle, User, FastForward 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+    CheckCircle2, AlertCircle, Clock, DownloadCloud,
+    Undo2, AlertTriangle, UploadCloud, Paperclip, XCircle, User, FastForward, RotateCcw
 } from "lucide-react"
+import { getDisplayStatus, getNovaLocacaoStage, NOVA_LOCACAO_STAGES } from "@/lib/ticketPhases"
+import NovaLocacaoTracker from "@/components/ticket/NovaLocacaoTracker"
+import NovaLocacaoStageForm from "@/components/ticket/NovaLocacaoStageForm"
+import HistoricoEstagiosTimeline from "@/components/ticket/HistoricoEstagiosTimeline"
 
 export default function TicketDetails() {
   const params = useParams()
   const router = useRouter()
   const [ticket, setTicket] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [currentUserName, setCurrentUserName] = useState("Usuário") 
+  const [currentUserName, setCurrentUserName] = useState("Usuário")
+  const [userRole, setUserRole] = useState("")
+  const [userDepartmentName, setUserDepartmentName] = useState<string | null>(null)
 
   const [modalOpen, setModalOpen] = useState(false)
   const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null)
@@ -41,6 +54,7 @@ export default function TicketDetails() {
   const [globalResolveModalOpen, setGlobalResolveModalOpen] = useState(false)
   const [arquivoGlobal, setArquivoGlobal] = useState<File | null>(null)
   const [obsGlobal, setObsGlobal] = useState("")
+  const [docReferenciaIdx, setDocReferenciaIdx] = useState("")
 
   useEffect(() => {
     async function fetchData() {
@@ -48,6 +62,24 @@ export default function TicketDetails() {
       if (user) {
         const nome = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || "Usuário"
         setCurrentUserName(nome.replace(/[._]/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()))
+
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role, department_id')
+          .eq('id', user.id)
+          .single()
+
+        if (profile) {
+          setUserRole(profile.role || "")
+          if (profile.department_id) {
+            const { data: dept } = await supabase
+              .from('departments')
+              .select('name')
+              .eq('id', profile.department_id)
+              .single()
+            setUserDepartmentName(dept?.name || null)
+          }
+        }
       }
 
       if (!params.id) return
@@ -79,6 +111,57 @@ export default function TicketDetails() {
       if (error) throw new Error("Erro no upload: " + error.message)
       const { data } = supabase.storage.from('anexos').getPublicUrl(nomeArquivoUnico)
       return { url: data.publicUrl, nome: nomeLimpo }
+  }
+
+  const podeAgirNaFase = (setorDaFase: string) => userRole === 'admin' || userDepartmentName === setorDaFase
+
+  // --- LÓGICA GENÉRICA DE AVANÇO DE FASE (NOVA LOCAÇÃO - 10 FASES) ---
+  async function avancarFase(dadosEstagio: any, chaveEstagio: string | null, anexosEstagio?: Array<{ nome: string; url: string; campo?: string }>) {
+      if (!ticket) return
+
+      const faseAtual = ticket.custom_data?.fase_atual || 1
+      const stageDef = getNovaLocacaoStage(ticket)
+      const novaFase = faseAtual + 1
+
+      const novoHistorico = [
+          ...(ticket.custom_data?.historico_estagios || []),
+          {
+              fase: faseAtual,
+              label: stageDef.label,
+              data: new Date().toISOString(),
+              usuario: currentUserName,
+              dados: dadosEstagio,
+              anexos: anexosEstagio || [],
+          }
+      ]
+
+      const novoCustomData: any = {
+          ...ticket.custom_data,
+          fase_atual: Math.min(novaFase, NOVA_LOCACAO_STAGES.length),
+          historico_estagios: novoHistorico,
+      }
+
+      if (chaveEstagio) {
+          novoCustomData[chaveEstagio] = dadosEstagio
+      }
+
+      const novoStatus = novaFase > NOVA_LOCACAO_STAGES.length
+          ? 'resolvido'
+          : (ticket.status === 'aberto' ? 'em_andamento' : ticket.status)
+
+      const { error } = await supabase.from('tickets').update({ custom_data: novoCustomData, status: novoStatus }).eq('id', ticket.id)
+
+      if (!error) {
+          setTicket({ ...ticket, custom_data: novoCustomData, status: novoStatus })
+          if (novoStatus === 'resolvido') {
+              alert("Locação concluída e baixada com sucesso!")
+              router.push('/dashboard')
+          } else {
+              alert("Fase avançada com sucesso!")
+          }
+      } else {
+          alert("Erro ao avançar fase: " + error.message)
+      }
   }
 
   const abrirModalBaixa = (index: number) => {
@@ -179,6 +262,7 @@ export default function TicketDetails() {
   const handleOpenGlobalResolve = () => {
       setObsGlobal("")
       setArquivoGlobal(null)
+      setDocReferenciaIdx("")
       setGlobalResolveModalOpen(true)
   }
 
@@ -210,17 +294,27 @@ export default function TicketDetails() {
         return alert("Erro: É obrigatório anexar o documento/faturamento emitido para concluir o ticket!")
     }
 
+    // TRAVA DE SEGURANÇA: Obriga o Financeiro a indicar a NF de referência do reembolso
+    if (ticket?.category === "Solicitação de Reembolso" && docReferenciaIdx === "") {
+        return alert("Erro: Selecione qual anexo é o documento de referência (NF) para concluir!")
+    }
+
     try {
         let dadosArquivo = null
         if (arquivoGlobal) dadosArquivo = await uploadFile(arquivoGlobal)
 
+        const docReferenciaNf = ticket.category === "Solicitação de Reembolso" && docReferenciaIdx !== ""
+            ? listaExibicao[Number(docReferenciaIdx)]
+            : undefined
+
         const novoCustomData = {
             ...ticket.custom_data,
+            ...(docReferenciaNf ? { doc_referencia_nf: docReferenciaNf } : {}),
             resolucao_global: {
                 data_resolucao: new Date().toISOString(),
                 obs: obsGlobal,
                 arquivo: dadosArquivo,
-                responsavel: currentUserName 
+                responsavel: currentUserName
             }
         }
 
@@ -239,15 +333,20 @@ export default function TicketDetails() {
 
   async function confirmarDevolucaoGlobal() {
       if (!returnReason.trim()) return alert("Por favor, explique o motivo da devolução.")
-      
-      const novoCustomData = { 
-        ...ticket.custom_data, 
+
+      const novoCustomData: any = {
+        ...ticket.custom_data,
         motivo_devolucao: returnReason,
-        responsavel_devolucao: currentUserName 
+        responsavel_devolucao: currentUserName
       }
-      
+
+      if (ticket.category === 'Nova Locação') {
+          novoCustomData.devolucao_estagio = ticket.custom_data?.fase_atual || 1
+          novoCustomData.status_anterior_devolucao = ticket.status
+      }
+
       const { error } = await supabase.from('tickets').update({ status: 'devolvida', custom_data: novoCustomData }).eq('id', ticket.id)
-      
+
       if (!error) {
           setTicket({ ...ticket, status: 'devolvida', custom_data: novoCustomData })
           setReturnModalOpen(false)
@@ -255,6 +354,27 @@ export default function TicketDetails() {
           alert("Solicitação devolvida ao solicitante.")
       } else {
           alert("Erro ao devolver.")
+      }
+  }
+
+  // --- REABERTURA (NOVA LOCAÇÃO): volta o ticket à fase de onde foi devolvido ---
+  async function confirmarReabertura() {
+      if (!ticket) return
+
+      const novoCustomData = { ...ticket.custom_data }
+      delete novoCustomData.motivo_devolucao
+      delete novoCustomData.responsavel_devolucao
+      const novoStatus = novoCustomData.status_anterior_devolucao || 'em_andamento'
+      delete novoCustomData.devolucao_estagio
+      delete novoCustomData.status_anterior_devolucao
+
+      const { error } = await supabase.from('tickets').update({ status: novoStatus, custom_data: novoCustomData }).eq('id', ticket.id)
+
+      if (!error) {
+          setTicket({ ...ticket, status: novoStatus, custom_data: novoCustomData })
+          alert("Chamado reaberto. Edite e avance a fase novamente.")
+      } else {
+          alert("Erro ao reabrir o chamado.")
       }
   }
 
@@ -272,7 +392,13 @@ export default function TicketDetails() {
   const resolucaoGlobal = ticket.custom_data?.resolucao_global
 
   const isDevolucaoLocacao = ticket.category === "Devolução Locação"
+  const isReembolso = ticket.category === "Solicitação de Reembolso"
+  const isNovaLocacao = ticket.category === "Nova Locação"
   const faseAtual = ticket.custom_data?.fase_atual || 1
+
+  const devolucaoEstagio = ticket.custom_data?.devolucao_estagio
+  const podeReabrirNovaLocacao = isNovaLocacao && ticket.status === 'devolvida' && devolucaoEstagio &&
+      podeAgirNaFase(NOVA_LOCACAO_STAGES[devolucaoEstagio - 1]?.setor)
 
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">
@@ -282,17 +408,16 @@ export default function TicketDetails() {
         <div>
             <div className="flex items-center gap-3">
                 <h1 className="text-3xl font-bold text-gray-900">Ticket #{ticket.id}</h1>
-                <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
-                    ticket.status === 'resolvido' ? 'bg-green-100 text-green-800' : 
-                    ticket.status === 'devolvida' ? 'bg-orange-100 text-orange-800' :
-                    'bg-yellow-100 text-yellow-800'
-                }`}>
-                    {ticket.status === 'devolvida' ? 'Devolvida' : ticket.status.replace('_', ' ')}
+                <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${getDisplayStatus(ticket).colorClass}`}>
+                    {getDisplayStatus(ticket).label}
                 </span>
             </div>
             <p className="text-gray-500 mt-1 text-lg">{ticket.title}</p>
         </div>
       </div>
+
+      {/* PAINEL VISUAL DE PROGRESSO (NOVA LOCAÇÃO) */}
+      {isNovaLocacao && <NovaLocacaoTracker ticket={ticket} />}
 
       {/* BANNER DE FASE (DEVOLUÇÃO LOCAÇÃO) */}
       {isDevolucaoLocacao && ticket.status !== 'resolvido' && ticket.status !== 'devolvida' && (
@@ -301,7 +426,7 @@ export default function TicketDetails() {
                   <FastForward className={faseAtual === 1 ? 'text-amber-600' : 'text-blue-600'} />
                   <div>
                       <h3 className={`font-bold ${faseAtual === 1 ? 'text-amber-800' : 'text-blue-800'}`}>
-                          Fase Atual: {faseAtual === 1 ? '1 - Gestão de Contratos (Validação)' : '2 - Faturamento (Lançar Documento)'}
+                          Fase Atual: {getDisplayStatus(ticket).label}
                       </h3>
                       <p className={`text-sm mt-1 ${faseAtual === 1 ? 'text-amber-900' : 'text-blue-900'}`}>
                           {faseAtual === 1 ? 'O setor de Contratos precisa validar as informações antes de liberar para o faturamento.' : 'Contrato validado! O setor de Faturamento deve anexar o documento fiscal para concluir.'}
@@ -316,19 +441,43 @@ export default function TicketDetails() {
           </div>
       )}
 
+      {/* BANNER DE FASE (SOLICITAÇÃO DE REEMBOLSO) */}
+      {isReembolso && ticket.status === 'aberto' && (
+          <div className="p-4 rounded shadow-sm border-l-4 bg-amber-50 border-amber-500">
+              <div className="flex items-start gap-3">
+                  <FastForward className="text-amber-600" />
+                  <div>
+                      <h3 className="font-bold text-amber-800">
+                          Fase Atual: {getDisplayStatus(ticket).label}
+                      </h3>
+                      <p className="text-sm mt-1 text-amber-900">
+                          O setor Financeiro precisa lançar a Nota Fiscal referente a este reembolso e indicar o anexo correspondente ao concluir o chamado.
+                      </p>
+                  </div>
+              </div>
+          </div>
+      )}
+
       {ticket.status === 'devolvida' && ticket.custom_data?.motivo_devolucao && (
           <div className="bg-orange-50 border-l-4 border-orange-500 p-4 rounded shadow-sm">
-              <div className="flex items-start gap-3">
-                  <AlertTriangle className="text-orange-600 mt-1" />
-                  <div>
-                      <h3 className="font-bold text-orange-800">Solicitação Devolvida (Global)</h3>
-                      <p className="text-orange-900 mt-1 font-medium">Motivo: "{ticket.custom_data.motivo_devolucao}"</p>
-                      {ticket.custom_data.responsavel_devolucao && (
-                          <p className="text-orange-700 text-xs mt-2 flex items-center gap-1 font-semibold">
-                             <User size={14}/> Devolvido por: {ticket.custom_data.responsavel_devolucao}
-                          </p>
-                      )}
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div className="flex items-start gap-3">
+                      <AlertTriangle className="text-orange-600 mt-1" />
+                      <div>
+                          <h3 className="font-bold text-orange-800">Solicitação Devolvida (Global)</h3>
+                          <p className="text-orange-900 mt-1 font-medium">Motivo: "{ticket.custom_data.motivo_devolucao}"</p>
+                          {ticket.custom_data.responsavel_devolucao && (
+                              <p className="text-orange-700 text-xs mt-2 flex items-center gap-1 font-semibold">
+                                 <User size={14}/> Devolvido por: {ticket.custom_data.responsavel_devolucao}
+                              </p>
+                          )}
+                      </div>
                   </div>
+                  {podeReabrirNovaLocacao && (
+                      <Button onClick={confirmarReabertura} className="bg-orange-600 hover:bg-orange-700 text-white gap-2 font-bold shrink-0">
+                          <RotateCcw size={16} /> Reabrir e Editar
+                      </Button>
+                  )}
               </div>
           </div>
       )}
@@ -345,6 +494,12 @@ export default function TicketDetails() {
                              <User size={14}/> Finalizado por: {resolucaoGlobal.responsavel}
                           </p>
                       )}
+                      {ticket.custom_data?.doc_referencia_nf && (
+                          <a href={ticket.custom_data.doc_referencia_nf.url} target="_blank" rel="noopener noreferrer"
+                             className="flex items-center gap-1 text-green-700 text-xs mt-1 font-semibold underline w-fit">
+                             <Paperclip size={14}/> Documento de referência (NF): {ticket.custom_data.doc_referencia_nf.nome}
+                          </a>
+                      )}
                       {resolucaoGlobal.arquivo && (
                           <div className="mt-3">
                               <a href={resolucaoGlobal.arquivo.url} target="_blank" rel="noopener noreferrer" 
@@ -358,9 +513,20 @@ export default function TicketDetails() {
           </div>
       )}
 
+      {/* AÇÃO DA FASE ATUAL (NOVA LOCAÇÃO) */}
+      {isNovaLocacao && ticket.status !== 'resolvido' && ticket.status !== 'devolvida' && (
+          <NovaLocacaoStageForm
+              key={faseAtual}
+              ticket={ticket}
+              uploadFile={uploadFile}
+              podeAgir={podeAgirNaFase(getNovaLocacaoStage(ticket).setor)}
+              onAvancar={avancarFase}
+          />
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="md:col-span-3 space-y-6">
-            
+
             {ticket.status !== 'resolvido' && ticket.status !== 'devolvida' && itensTabela && (
                 <div className={`p-4 rounded-md flex items-center gap-3 ${pendencias > 0 ? 'bg-blue-50 border border-blue-200' : 'bg-green-50 border border-green-200'}`}>
                     {pendencias > 0 ? <Clock className="text-blue-500" /> : <CheckCircle2 className="text-green-500" />}
@@ -447,8 +613,8 @@ export default function TicketDetails() {
                     {ticket.custom_data && (
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
                             {Object.entries(ticket.custom_data).map(([key, value]) => {
-                                if (['description', 'prioridade', 'itens_tabela', 'nome_arquivo_anexo', 'url_arquivo_anexo', 'motivo_devolucao', 'resolucao_global', 'responsavel_devolucao', 'anexos', 'fase_atual', 'responsavel_fase1', 'data_fase1', 'pats'].includes(key)) return null
-                                if (!value) return null
+                                if (['description', 'prioridade', 'itens_tabela', 'nome_arquivo_anexo', 'url_arquivo_anexo', 'motivo_devolucao', 'resolucao_global', 'responsavel_devolucao', 'anexos', 'fase_atual', 'responsavel_fase1', 'data_fase1', 'pats', 'doc_referencia_nf', 'historico_estagios', 'documentos_estagio1', 'devolucao_estagio', 'status_anterior_devolucao'].includes(key)) return null
+                                if (!value || typeof value === 'object') return null
                                 return (
                                     <div key={key} className="bg-white p-3 rounded border shadow-sm max-h-60 overflow-y-auto">
                                         <span className="block text-[10px] font-bold text-gray-400 uppercase">{formatKey(key)}</span>
@@ -465,16 +631,41 @@ export default function TicketDetails() {
                                 <div className="bg-blue-200 p-2 rounded text-blue-700"><DownloadCloud size={20}/></div>
                                 <p className="text-sm font-bold text-blue-800 uppercase">Arquivos Anexados ({listaExibicao.length})</p>
                             </div>
-                            
+
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                 {listaExibicao.map((anexo: any, idx: number) => (
                                     <div key={idx} className="flex items-center justify-between bg-white p-2 rounded border border-blue-100 shadow-sm">
                                         <span className="text-sm text-gray-600 truncate max-w-[200px]">{anexo.nome}</span>
-                                        <Button 
-                                            variant="outline" 
-                                            size="sm" 
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
                                             className="text-blue-700 border-blue-200 hover:bg-blue-50 h-8"
                                             onClick={() => window.open(anexo.url, '_blank')}
+                                        >
+                                            Baixar
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {isNovaLocacao && ticket.custom_data?.documentos_estagio1 && (
+                        <div className="mt-4 p-4 bg-amber-50 border border-amber-100 rounded">
+                            <div className="flex items-center gap-2 mb-3">
+                                <div className="bg-amber-200 p-2 rounded text-amber-700"><Paperclip size={20}/></div>
+                                <p className="text-sm font-bold text-amber-800 uppercase">Documentos do Estágio 1 (Comercial)</p>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                {Object.entries(ticket.custom_data.documentos_estagio1).map(([key, doc]: [string, any]) => doc && (
+                                    <div key={key} className="flex items-center justify-between bg-white p-2 rounded border border-amber-100 shadow-sm">
+                                        <span className="text-sm text-gray-600 truncate max-w-[200px]">{doc.nome}</span>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="text-amber-700 border-amber-200 hover:bg-amber-50 h-8"
+                                            onClick={() => window.open(doc.url, '_blank')}
                                         >
                                             Baixar
                                         </Button>
@@ -494,7 +685,7 @@ export default function TicketDetails() {
                             <Undo2 size={16} /> Devolver Tudo
                         </Button>
                         
-                        {(!itensTabela || itensTabela.length === 0) && (
+                        {(!itensTabela || itensTabela.length === 0) && !isNovaLocacao && (
                             isDevolucaoLocacao ? (
                                 faseAtual === 1 ? (
                                     <Button onClick={confirmarAvancoFase} className="bg-amber-600 hover:bg-amber-700 text-white gap-2 font-bold shadow-md">
@@ -516,6 +707,9 @@ export default function TicketDetails() {
             </div>
         </div>
       </div>
+
+      {/* HISTÓRICO DO PROCESSO (NOVA LOCAÇÃO) */}
+      {isNovaLocacao && <HistoricoEstagiosTimeline historico={ticket.custom_data?.historico_estagios} />}
 
       {/* MODAL 1: BAIXA DE ITEM */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
@@ -576,6 +770,26 @@ export default function TicketDetails() {
             </DialogHeader>
             <div className="py-4 space-y-4">
                 <div><Label>Observações</Label><Textarea value={obsGlobal} onChange={e => setObsGlobal(e.target.value)} /></div>
+                {isReembolso && (
+                    <div className="border-t pt-4 mt-2">
+                        <Label className="mb-2 block text-amber-800 font-bold text-xs uppercase">
+                            Documento de referência (NF) *
+                        </Label>
+                        <Select value={docReferenciaIdx} onValueChange={setDocReferenciaIdx}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Selecione o anexo correspondente à NF" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {listaExibicao.map((anexo: any, idx: number) => (
+                                    <SelectItem key={idx} value={String(idx)}>{anexo.nome}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        {listaExibicao.length === 0 && (
+                            <p className="text-[11px] text-red-500 font-bold mt-1">Nenhum anexo encontrado neste chamado.</p>
+                        )}
+                    </div>
+                )}
                 <div className="border-t pt-4 mt-2">
                     <Label className="flex items-center gap-2 mb-2 text-green-800 font-bold text-xs uppercase">
                         <UploadCloud size={14}/> Anexar Arquivo Final {isDevolucaoLocacao && "*"}
