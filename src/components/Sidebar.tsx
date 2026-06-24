@@ -18,7 +18,9 @@ import {
   Bug,
   RotateCcw, // Ícone novo adicionado para a Devolução
   UserCog,
-  ListChecks
+  ListChecks,
+  FileCheck2,
+  PackageMinus
 } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { useState, useEffect } from "react"
@@ -79,9 +81,11 @@ export function Sidebar() {
     { name: "Compra", icon: ShoppingCart, href: "/dashboard?sector=Compra" },
     { name: "Cotação", icon: FileText, href: "/dashboard?sector=Cotação" },
     { name: "Solicitação Pagamento", icon: Banknote, href: "/dashboard?sector=Solicitação de Pagamento" },
+    { name: "Entrada de NF", icon: FileCheck2, href: "/dashboard?sector=Entrada de NF" },
     { name: "Solicitação Reembolso", icon: Receipt, href: "/dashboard?sector=Solicitação de Reembolso" },
     { name: "Divergência / Devolução", icon: AlertTriangle, href: "/dashboard?sector=Divergência" },
     { name: "Cadastro Mercadoria", icon: Package, href: "/dashboard?sector=Cadastro Mercadoria" },
+    { name: "Baixa Revenda", icon: PackageMinus, href: "/dashboard?sector=Baixa Revenda" },
     { name: "Cadastro Cliente", icon: Users, href: "/dashboard?sector=Cadastro Cliente" },
     { name: "Cadastro Fornecedor", icon: Users, href: "/dashboard?sector=Cadastro Fornecedor" },
     { name: "Emissão de Documento", icon: FileSignature, href: "/dashboard?sector=Emissão de Documento" },

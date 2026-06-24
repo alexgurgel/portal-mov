@@ -4,12 +4,14 @@
 export const SECTOR_BY_CATEGORY: Record<string, string> = {
   "Cadastro Cliente": "Contratos",
   "Solicitação de Pagamento": "Faturamento",
+  "Entrada de NF": "Financeiro",
   "Divergência": "Faturamento",
   "Emissão de Documento": "Faturamento",
   "Compra": "Compras",
   "Cotação": "Compras",
   "Cadastro Fornecedor": "Compras",
   "Cadastro Mercadoria": "Compras",
+  "Baixa Revenda": "Compras",
 }
 
 export type DisplayStatus = {

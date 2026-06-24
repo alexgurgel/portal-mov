@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, type ReactNode } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { Bug, Lightbulb, Clock, CheckCircle, XCircle, ChevronUp, Send, MessageSquare } from "lucide-react"
+import { Bug, Lightbulb, Clock, CheckCircle, XCircle, ChevronUp, Send, MessageSquare, CalendarClock } from "lucide-react"
+import { getDisplayStatus } from "@/lib/ticketPhases"
 
 const VIVIANE_EMAIL = "viviane.lopes@grupomov.com.br"
 const ALEX_EMAIL = "alexgabrielb@hotmail.com" // Alterado para o seu e-mail pessoal
@@ -29,16 +30,37 @@ type BugReport = {
   status: "pendente" | "aprovado" | "recusado"
   created_at: string
   ticket_id?: number
+  previsao_atendimento?: string | null
 }
+
+type TicketResumo = {
+  id: number
+  status: string
+}
+
+const TICKET_CONCLUIDO = ['resolvido', 'devolvida']
 
 export default function SuporteClient() {
   const [userEmail, setUserEmail] = useState("")
   const [userName, setUserName] = useState("")
   const [userId, setUserId] = useState("")
   const [reports, setReports] = useState<BugReport[]>([])
+  const [ticketsMap, setTicketsMap] = useState<Record<number, TicketResumo>>({})
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [showForm, setShowForm] = useState(false)
+  const [activeTab, setActiveTab] = useState<"abertos" | "concluidos">("abertos")
+  const [previsaoInputs, setPrevisaoInputs] = useState<Record<number, string>>({})
+  const [expandedDescriptions, setExpandedDescriptions] = useState<Set<number>>(new Set())
+
+  const toggleDescription = (id: number) => {
+    setExpandedDescriptions(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   const [type, setType] = useState<"bug" | "melhoria">("bug")
   const [title, setTitle] = useState("")
@@ -118,6 +140,20 @@ export default function SuporteClient() {
       .order('created_at', { ascending: false })
     if (error) console.error('Erro ao buscar relatos:', error)
     setReports(data || [])
+
+    const ticketIds = (data || []).map(r => r.ticket_id).filter((id): id is number => !!id)
+    if (ticketIds.length > 0) {
+      const { data: ticketsData } = await supabase
+        .from('tickets')
+        .select('id, status')
+        .in('id', ticketIds)
+      const map: Record<number, TicketResumo> = {}
+      for (const t of ticketsData || []) map[t.id] = t
+      setTicketsMap(map)
+    } else {
+      setTicketsMap({})
+    }
+
     setLoading(false)
   }
 
@@ -164,6 +200,7 @@ export default function SuporteClient() {
     await supabase.from('bug_reports').update({
       status: 'aprovado',
       ticket_id: ticket.id,
+      previsao_atendimento: previsaoInputs[report.id] || null,
     }).eq('id', report.id)
 
     fetchReports()
@@ -174,19 +211,39 @@ export default function SuporteClient() {
     fetchReports()
   }
 
-  const statusIcon = (status: string) => {
-    if (status === 'aprovado') return <CheckCircle size={16} className="text-green-600" />
-    if (status === 'recusado') return <XCircle size={16} className="text-red-500" />
-    return <Clock size={16} className="text-yellow-500" />
+  async function handleUpdatePrevisao(reportId: number, data: string) {
+    await supabase.from('bug_reports').update({ previsao_atendimento: data || null }).eq('id', reportId)
+    setReports(prev => prev.map(r => r.id === reportId ? { ...r, previsao_atendimento: data || null } : r))
   }
 
-  const statusLabel = (status: string) => {
-    if (status === 'aprovado') return 'Aprovado'
-    if (status === 'recusado') return 'Recusado'
-    return 'Aguardando'
+  // Status real exibido: para relatos aprovados, reflete o status do ticket
+  // criado (Aberto/Em Andamento/Finalizado/Devolvida) em vez de só "Aprovado".
+  function getStatusVisual(report: BugReport): { label: string; colorClass: string; icon: ReactNode } {
+    if (report.status === 'pendente') {
+      return { label: 'Aguardando Aprovação', colorClass: 'bg-yellow-100 text-yellow-700', icon: <Clock size={14} /> }
+    }
+    if (report.status === 'recusado') {
+      return { label: 'Recusado', colorClass: 'bg-red-100 text-red-700', icon: <XCircle size={14} /> }
+    }
+    const ticket = report.ticket_id ? ticketsMap[report.ticket_id] : undefined
+    if (!ticket) {
+      return { label: 'Aprovado', colorClass: 'bg-blue-100 text-blue-700', icon: <CheckCircle size={14} /> }
+    }
+    const display = getDisplayStatus(ticket)
+    return { label: display.label, colorClass: display.colorClass, icon: <CheckCircle size={14} /> }
+  }
+
+  function isConcluido(report: BugReport): boolean {
+    if (report.status === 'recusado') return true
+    if (report.status !== 'aprovado') return false
+    const ticket = report.ticket_id ? ticketsMap[report.ticket_id] : undefined
+    return !!ticket && TICKET_CONCLUIDO.includes(ticket.status)
   }
 
   const pendentes = reports.filter(r => r.status === 'pendente')
+  const reportsAbertos = reports.filter(r => !isConcluido(r))
+  const reportsConcluidos = reports.filter(r => isConcluido(r))
+  const listaAtual = activeTab === 'abertos' ? reportsAbertos : reportsConcluidos
 
   return (
     <div className="w-full space-y-6">
@@ -273,7 +330,16 @@ export default function SuporteClient() {
               </div>
               <p className="font-bold text-gray-900 text-sm">{report.title}</p>
               <p className="text-xs text-gray-600">{report.description}</p>
-              <div className="flex gap-2 pt-1">
+              <div className="flex flex-wrap items-end gap-2 pt-1">
+                <div>
+                  <Label className="text-[11px] text-gray-500">Previsão de Atendimento</Label>
+                  <Input
+                    type="date"
+                    className="h-8 text-xs"
+                    value={previsaoInputs[report.id] || ""}
+                    onChange={e => setPrevisaoInputs(prev => ({ ...prev, [report.id]: e.target.value }))}
+                  />
+                </div>
                 <Button size="sm" onClick={() => handleAprovar(report)} className="bg-green-600 hover:bg-green-700 text-white text-xs">
                   <CheckCircle size={14} className="mr-1" /> Aprovar e Criar Ticket
                 </Button>
@@ -288,52 +354,105 @@ export default function SuporteClient() {
 
       {/* Lista de relatos */}
       <div className="bg-white rounded-lg shadow border overflow-hidden">
-        <div className="px-5 py-3 border-b bg-gray-50">
-          <h2 className="font-bold text-gray-700 text-sm">
-            {isAdmin ? 'Todos os Relatos' : 'Meus Relatos'}
-          </h2>
+        <div className="px-5 pt-3 border-b bg-gray-50 flex items-center gap-2">
+          <button
+            onClick={() => setActiveTab('abertos')}
+            className={`px-3 py-2 text-sm font-bold border-b-2 transition-colors ${activeTab === 'abertos' ? 'border-[#F3C843] text-gray-900' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+          >
+            Em Aberto ({reportsAbertos.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('concluidos')}
+            className={`px-3 py-2 text-sm font-bold border-b-2 transition-colors ${activeTab === 'concluidos' ? 'border-[#F3C843] text-gray-900' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+          >
+            Concluídos ({reportsConcluidos.length})
+          </button>
         </div>
 
         {loading ? (
           <div className="p-10 text-center text-gray-400 text-sm">Carregando...</div>
-        ) : reports.length === 0 ? (
-          <div className="p-10 text-center text-gray-400 text-sm">Nenhum relato encontrado.</div>
+        ) : listaAtual.length === 0 ? (
+          <div className="p-10 text-center text-gray-400 text-sm">
+            {activeTab === 'abertos' ? 'Nenhum relato em aberto.' : 'Nenhum relato concluído ainda.'}
+          </div>
         ) : (
           <table className="w-full text-sm text-left">
             <thead className="text-xs text-gray-600 uppercase bg-gray-50 border-b">
               <tr>
                 <th className="px-4 py-3 w-[8%]">Tipo</th>
-                <th className="px-4 py-3 w-[35%]">Título</th>
-                {isAdmin && <th className="px-4 py-3 w-[15%]">Solicitante</th>}
+                <th className="px-4 py-3 w-[27%]">Título</th>
+                {isAdmin && <th className="px-4 py-3 w-[12%]">Solicitante</th>}
                 <th className="px-4 py-3">Descrição</th>
                 <th className="px-4 py-3 w-[12%]">Data</th>
-                <th className="px-4 py-3 w-[12%]">Status</th>
+                <th className="px-4 py-3 w-[13%]">Previsão</th>
+                <th className="px-4 py-3 w-[14%]">Status</th>
               </tr>
             </thead>
             <tbody>
-              {reports.map(report => (
+              {listaAtual.map(report => {
+                const statusVisual = getStatusVisual(report)
+                return (
                 <tr key={report.id} className="border-b hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${report.type === 'bug' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
                       {report.type === 'bug' ? 'Bug' : 'Melhoria'}
                     </span>
                   </td>
-                  <td className="px-4 py-3 font-medium text-gray-900">{report.title}</td>
+                  <td className="px-4 py-3 font-medium text-gray-900">
+                    {report.title}
+                    {report.ticket_id && (
+                      <a href={`/dashboard/ticket/${report.ticket_id}`} className="ml-1 text-blue-500 underline text-xs font-normal">
+                        #{report.ticket_id}
+                      </a>
+                    )}
+                  </td>
                   {isAdmin && <td className="px-4 py-3 text-gray-600 text-xs">{report.requester_name}</td>}
-                  <td className="px-4 py-3 text-xs text-gray-500 line-clamp-2">{report.description}</td>
+                  <td className="px-4 py-3 text-xs text-gray-500 max-w-xs">
+                    {(() => {
+                      const isExpanded = expandedDescriptions.has(report.id)
+                      const isLong = report.description.length > 90
+                      return (
+                        <>
+                          <p className={isExpanded ? "max-h-32 overflow-y-auto whitespace-pre-wrap pr-1" : "line-clamp-2"}>
+                            {report.description}
+                          </p>
+                          {isLong && (
+                            <button
+                              type="button"
+                              onClick={() => toggleDescription(report.id)}
+                              className="text-blue-500 font-semibold mt-1 hover:underline"
+                            >
+                              {isExpanded ? "Ver menos" : "Ver mais"}
+                            </button>
+                          )}
+                        </>
+                      )
+                    })()}
+                  </td>
                   <td className="px-4 py-3 text-gray-400 text-xs">{new Date(report.created_at).toLocaleDateString('pt-BR')}</td>
+                  <td className="px-4 py-3 text-xs">
+                    {isAdmin ? (
+                      <Input
+                        type="date"
+                        className="h-7 text-xs"
+                        value={report.previsao_atendimento || ""}
+                        onChange={e => handleUpdatePrevisao(report.id, e.target.value)}
+                      />
+                    ) : report.previsao_atendimento ? (
+                      <span className="flex items-center gap-1 text-gray-600">
+                        <CalendarClock size={13} /> {new Date(report.previsao_atendimento + 'T00:00:00').toLocaleDateString('pt-BR')}
+                      </span>
+                    ) : (
+                      <span className="text-gray-300">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
-                    <span className="flex items-center gap-1 text-xs font-semibold">
-                      {statusIcon(report.status)} {statusLabel(report.status)}
-                      {report.ticket_id && (
-                        <a href={`/dashboard/ticket/${report.ticket_id}`} className="ml-1 text-blue-500 underline text-xs">
-                          #{report.ticket_id}
-                        </a>
-                      )}
+                    <span className={`flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full w-fit ${statusVisual.colorClass}`}>
+                      {statusVisual.icon} {statusVisual.label}
                     </span>
                   </td>
                 </tr>
-              ))}
+              )})}
             </tbody>
           </table>
         )}

@@ -44,6 +44,10 @@ export function NewTicket() {
   const [items, setItems] = useState([
     { codigo: '', descricao: '', qtd: 1, pat: '', aplicacao: '' }
   ])
+
+  const [baixaItems, setBaixaItems] = useState([
+    { codigo: '', quantidade: '', requisicao: '', data_requisicao: '' }
+  ])
   
   const [arquivosParaUpload, setArquivosParaUpload] = useState<File[]>([])
   const [namedUploads, setNamedUploads] = useState<Record<string, File | null>>({})
@@ -75,6 +79,7 @@ export function NewTicket() {
         // Garante que toda vez que abrir a tela, o PAT esteja vazio e pronto para uso
         setFormData({ prioridade: 'media', pats: [''] })
         setItems([{ codigo: '', descricao: '', qtd: 1, pat: '', aplicacao: '' }])
+        setBaixaItems([{ codigo: '', quantidade: '', requisicao: '', data_requisicao: '' }])
         setTitle("")
         setArquivosParaUpload([])
         setNamedUploads({})
@@ -93,6 +98,15 @@ export function NewTicket() {
   }
   const addItem = () => setItems([...items, { codigo: '', descricao: '', qtd: 1, pat: '', aplicacao: '' }])
   const removeItem = (index: number) => setItems(items.filter((_, i) => i !== index))
+
+  const updateBaixaItem = (index: number, field: string, value: any) => {
+    const newItems = [...baixaItems]
+    // @ts-ignore
+    newItems[index][field] = value
+    setBaixaItems(newItems)
+  }
+  const addBaixaItem = () => setBaixaItems([...baixaItems, { codigo: '', quantidade: '', requisicao: '', data_requisicao: '' }])
+  const removeBaixaItem = (index: number) => setBaixaItems(baixaItems.filter((_, i) => i !== index))
 
   const sanitizeFileName = (name: string) => {
     return name
@@ -128,10 +142,28 @@ export function NewTicket() {
 
     const categoriasObrigatorias = [
       'Cadastro Fornecedor', 'Cadastro Cliente', 'Solicitação de Pagamento',
-      'Solicitação de Reembolso', 'Divergência', 'Devolução Locação'
+      'Solicitação de Reembolso', 'Divergência', 'Devolução Locação', 'Entrada de NF'
     ]
     if (categoriasObrigatorias.includes(category) && arquivosParaUpload.length === 0) {
         return alert(`É obrigatório anexar pelo menos um documento para ${category}.`)
+    }
+
+    // VALIDAÇÃO EXCLUSIVA PARA ENTRADA DE NF
+    if (category === "Entrada de NF") {
+        const codigosList = formData.codigos_entrada || []
+        const hasValidCodigo = codigosList.some((c: { codigo: string }) => c.codigo?.trim() !== "")
+
+        if (!formData.fornecedor || !formData.numero_nf || !formData.data_emissao || !formData.local_estoque || !hasValidCodigo) {
+            return alert("Por favor, preencha todos os campos obrigatórios (Fornecedor, Nº da NF, Data Emissão, Local Estoque e ao menos 1 Código de Entrada).")
+        }
+    }
+
+    // VALIDAÇÃO EXCLUSIVA PARA BAIXA REVENDA
+    if (category === "Baixa Revenda") {
+        const linhaValida = (i: typeof baixaItems[0]) => i.codigo.trim() && i.quantidade.toString().trim() && i.requisicao.trim() && i.data_requisicao.trim()
+        if (!baixaItems.some(linhaValida)) {
+            return alert("Por favor, preencha ao menos uma linha completa (Código, Quantidade, Requisição e Data Requisição).")
+        }
     }
 
     // VALIDAÇÃO EXCLUSIVA PARA NOVA LOCAÇÃO (Estágio 1 - Comercial)
@@ -235,6 +267,14 @@ export function NewTicket() {
         finalTitle = `Pagamento: ${formData.beneficiario || 'Diversos'} - R$ ${formData.valor || '0,00'}`
         description = `Vencimento: ${formData.vencimento} | Obs: ${formData.description || '-'}`
       }
+      else if (category === "Entrada de NF") {
+        const codigosString = (formData.codigos_entrada || [])
+          .filter((c: { codigo: string }) => c.codigo?.trim() !== "")
+          .map((c: { codigo: string; quantidade: string }) => `${c.codigo}${c.quantidade ? ` (${c.quantidade})` : ''}`)
+          .join(', ')
+        finalTitle = `Entrada NF: ${formData.fornecedor || 'Fornecedor'} - NF ${formData.numero_nf}`
+        description = `Local Estoque: ${formData.local_estoque} | Data Emissão: ${formData.data_emissao} | Códigos: ${codigosString} | Obs: ${formData.description || '-'}`
+      }
       else if (category === "Solicitação de Reembolso") {
         finalTitle = `Reembolso: R$ ${formData.valor || '0,00'}`
         description = `Data Despesa: ${formData.data_despesa} | Motivo: ${formData.description || '-'}`
@@ -246,6 +286,12 @@ export function NewTicket() {
       else if (category === "Compra" || category === "Cotação") {
         const primeiro = items[0].descricao || "Itens"
         finalTitle = `${category}: ${primeiro} ${items.length > 1 ? `(+${items.length - 1})` : ''}`
+      }
+      else if (category === "Baixa Revenda") {
+        const linhasValidas = baixaItems.filter(i => i.codigo.trim() !== "")
+        const primeiro = linhasValidas[0]?.codigo || "Itens"
+        finalTitle = `Baixa Revenda: ${primeiro} ${linhasValidas.length > 1 ? `(+${linhasValidas.length - 1})` : ''}`
+        description = formData.description || '-'
       }
 
       const { error } = await supabase.from('tickets').insert({
@@ -262,6 +308,7 @@ export function NewTicket() {
           documentos_estagio1: category === "Nova Locação" ? documentosEstagio1 : undefined,
           historico_estagios: category === "Nova Locação" ? [] : undefined,
           itens_tabela: category === "Compra" || category === "Cotação" ? items : null,
+          itens_baixa: category === "Baixa Revenda" ? baixaItems.filter(i => i.codigo.trim() !== "") : null,
           anexos: listaAnexosSalvos,
           nome_arquivo_anexo: listaAnexosSalvos[0]?.nome || "",
           url_arquivo_anexo: listaAnexosSalvos[0]?.url || ""
@@ -438,12 +485,88 @@ export function NewTicket() {
         return (
             <div className="grid gap-3 border p-4 rounded-md bg-emerald-50">
                 <h3 className="font-bold text-sm text-emerald-900">Dados do Pagamento</h3>
+                <div className="bg-yellow-100 p-2 text-xs text-yellow-800 rounded border border-yellow-200 font-semibold">
+                    ⚠️ Use esta opção apenas para adiantamentos (sem NF emitida) ou pagamentos de NF à vista. Para regularizar adiantamento, enviar NF de entrada/conserto ou compra de revenda direta, use "Entrada de NF".
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                     <div className="col-span-2"><Label>Beneficiário / Empresa</Label><Input onChange={e => updateForm('beneficiario', e.target.value)} placeholder="Quem vai receber?" /></div>
                     <div><Label>Valor Total (R$)</Label><Input type="number" step="0.01" onChange={e => updateForm('valor', e.target.value)} placeholder="0,00" /></div>
                     <div><Label>Data Vencimento</Label><Input type="date" onChange={e => updateForm('vencimento', e.target.value)} /></div>
                 </div>
                 <div><Label>Observações / Dados Bancários</Label><Textarea onChange={e => updateForm('description', e.target.value)} placeholder="PIX, conta ou detalhes..." /></div>
+            </div>
+        )
+      case "Entrada de NF":
+        return (
+            <div className="grid gap-3 border p-4 rounded-md bg-cyan-50">
+                <h3 className="font-bold text-sm text-cyan-900">Dados da Entrada de NF</h3>
+                <div className="bg-cyan-100 p-2 text-xs text-cyan-800 rounded border border-cyan-200 font-semibold">
+                    ⚠️ Válido para regularizar adiantamentos solicitados, enviar NF's de entrada/conserto ou compras de revenda direta.
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                    <div className="col-span-2"><Label className="font-bold">Fornecedor *</Label><Input className="bg-white" onChange={e => updateForm('fornecedor', e.target.value)} placeholder="Razão social do fornecedor" /></div>
+                    <div><Label className="font-bold">Número da NF *</Label><Input className="bg-white" onChange={e => updateForm('numero_nf', e.target.value)} /></div>
+                    <div><Label className="font-bold">Data Emissão *</Label><Input className="bg-white" type="date" onChange={e => updateForm('data_emissao', e.target.value)} /></div>
+                    <div className="col-span-2"><Label className="font-bold">Local Estoque *</Label><Input className="bg-white" onChange={e => updateForm('local_estoque', e.target.value)} placeholder="Onde a mercadoria será recebida" /></div>
+                </div>
+
+                <div className="bg-white p-3 rounded border border-cyan-200 shadow-sm mt-1">
+                    <Label className="font-bold block mb-2 text-cyan-900">Códigos de Entrada *</Label>
+                    <div className="grid grid-cols-1 gap-2">
+                        {(formData.codigos_entrada || [{ codigo: '', quantidade: '' }]).map((item: { codigo: string; quantidade: string }, idx: number) => (
+                            <div key={idx} className="flex items-center gap-2">
+                                <Input
+                                    className="bg-gray-50 h-8 text-sm flex-[2]"
+                                    placeholder="Código"
+                                    value={item.codigo}
+                                    onChange={e => {
+                                        const newCodigos = [...(formData.codigos_entrada || [{ codigo: '', quantidade: '' }])]
+                                        newCodigos[idx] = { ...newCodigos[idx], codigo: e.target.value }
+                                        updateForm('codigos_entrada', newCodigos)
+                                    }}
+                                />
+                                <Input
+                                    className="bg-gray-50 h-8 text-sm flex-1"
+                                    type="number"
+                                    placeholder="Qtd"
+                                    value={item.quantidade}
+                                    onChange={e => {
+                                        const newCodigos = [...(formData.codigos_entrada || [{ codigo: '', quantidade: '' }])]
+                                        newCodigos[idx] = { ...newCodigos[idx], quantidade: e.target.value }
+                                        updateForm('codigos_entrada', newCodigos)
+                                    }}
+                                />
+                                {idx === 0 ? (
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="h-8 w-8 p-0 shrink-0 border-cyan-300 text-cyan-700 hover:bg-cyan-100"
+                                        onClick={() => updateForm('codigos_entrada', [...(formData.codigos_entrada || [{ codigo: '', quantidade: '' }]), { codigo: '', quantidade: '' }])}
+                                        title="Adicionar mais um código"
+                                    >
+                                        <Plus size={16} />
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="h-8 w-8 p-0 shrink-0 border-red-200 text-red-500 hover:bg-red-50"
+                                        onClick={() => {
+                                            const newCodigos = [...formData.codigos_entrada]
+                                            newCodigos.splice(idx, 1)
+                                            updateForm('codigos_entrada', newCodigos)
+                                        }}
+                                        title="Remover este código"
+                                    >
+                                        <Trash2 size={16} />
+                                    </Button>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div><Label>Observações</Label><Textarea className="bg-white" onChange={e => updateForm('description', e.target.value)} placeholder="Detalhes adicionais sobre a entrada..." /></div>
             </div>
         )
       case "Solicitação de Reembolso":
@@ -548,6 +671,41 @@ export function NewTicket() {
                 </div>
             </div>
         )
+      case "Baixa Revenda":
+        return (
+            <div className="grid gap-3 border p-4 rounded-md bg-rose-50">
+                <h3 className="font-bold text-sm text-rose-900">Dados da Baixa Revenda</h3>
+                <div className="bg-rose-100 p-2 text-xs text-rose-800 rounded border border-rose-200 font-semibold">
+                    ⚠️ Não usar este processo em caso de item danificado / extraviado. Não vale para estoque REVENDA MOV COM.
+                </div>
+
+                <div className="border rounded-md overflow-hidden bg-white shadow-sm mt-1">
+                    <div className="grid grid-cols-12 gap-2 bg-gray-100 p-2 text-xs font-bold text-gray-700 border-b">
+                        <div className="col-span-3">Código *</div>
+                        <div className="col-span-2">Quantidade *</div>
+                        <div className="col-span-3">Requisição *</div>
+                        <div className="col-span-3">Data Requisição *</div>
+                        <div className="col-span-1"></div>
+                    </div>
+                    <div className="max-h-60 overflow-y-auto">
+                        {baixaItems.map((item, index) => (
+                            <div key={index} className="grid grid-cols-12 gap-2 p-2 border-b items-center hover:bg-gray-50">
+                                <div className="col-span-3"><Input className="h-8 text-xs" value={item.codigo} onChange={e => updateBaixaItem(index, 'codigo', e.target.value)} /></div>
+                                <div className="col-span-2"><Input className="h-8 text-xs" type="number" value={item.quantidade} onChange={e => updateBaixaItem(index, 'quantidade', e.target.value)} /></div>
+                                <div className="col-span-3"><Input className="h-8 text-xs" value={item.requisicao} onChange={e => updateBaixaItem(index, 'requisicao', e.target.value)} /></div>
+                                <div className="col-span-3"><Input className="h-8 text-xs" type="date" value={item.data_requisicao} onChange={e => updateBaixaItem(index, 'data_requisicao', e.target.value)} /></div>
+                                <div className="col-span-1 text-center">
+                                    {baixaItems.length > 1 && <Button variant="ghost" size="sm" onClick={() => removeBaixaItem(index)} className="h-8 w-8 text-red-500"><Trash2 size={16}/></Button>}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="p-2 bg-gray-50 border-t"><Button variant="outline" size="sm" onClick={addBaixaItem} className="w-full text-xs"><Plus size={14} className="mr-2"/> Adicionar Item</Button></div>
+                </div>
+
+                <div><Label>Observações</Label><Textarea className="bg-white" onChange={e => updateForm('description', e.target.value)} placeholder="Detalhes adicionais sobre a baixa..." /></div>
+            </div>
+        )
       case "Emissão de Documento":
         return (
             <div className="grid gap-3 border p-4 rounded-md bg-green-50">
@@ -593,9 +751,11 @@ export function NewTicket() {
                         <SelectItem value="Compra">Compra</SelectItem>
                         <SelectItem value="Cotação">Cotação</SelectItem>
                         <SelectItem value="Solicitação de Pagamento">Solicitação de Pagamento</SelectItem>
+                        <SelectItem value="Entrada de NF">Entrada de NF</SelectItem>
                         <SelectItem value="Solicitação de Reembolso">Solicitação de Reembolso</SelectItem>
                         <SelectItem value="Divergência">Divergência / Devolução</SelectItem>
                         <SelectItem value="Cadastro Mercadoria">Cadastro Mercadoria</SelectItem>
+                        <SelectItem value="Baixa Revenda">Baixa Revenda</SelectItem>
                         <SelectItem value="Cadastro Cliente">Cadastro Cliente</SelectItem>
                         <SelectItem value="Cadastro Fornecedor">Cadastro Fornecedor</SelectItem>
                         <SelectItem value="Emissão de Documento">Emissão de Documento</SelectItem>
@@ -621,6 +781,7 @@ export function NewTicket() {
               {category === "Devolução Locação" && <div className="bg-amber-100 p-2 text-[11px] text-amber-800 rounded mb-2 border border-amber-200 font-bold">⚠️ Obrigatório: Anexar a Nota Fiscal de Devolução e comprovantes de coleta.</div>}
               {(category === "Cadastro Cliente" || category === "Cadastro Fornecedor") && <div className="bg-blue-100 p-2 text-[11px] text-blue-800 rounded mb-2 border border-blue-200 font-bold">⚠️ Obrigatório anexar o Cartão CNPJ aqui.</div>}
               {category === "Solicitação de Pagamento" && <div className="bg-emerald-100 p-2 text-[11px] text-emerald-800 rounded mb-2 border border-emerald-200 font-bold">⚠️ Obrigatório anexar o Boleto ou Nota Fiscal.</div>}
+              {category === "Entrada de NF" && <div className="bg-cyan-100 p-2 text-[11px] text-cyan-800 rounded mb-2 border border-cyan-200 font-bold">⚠️ Obrigatório anexar a Nota Fiscal de Entrada.</div>}
               {category === "Solicitação de Reembolso" && <div className="bg-indigo-100 p-2 text-[11px] text-indigo-800 rounded mb-2 border border-indigo-200 font-bold">⚠️ Obrigatório anexar o Comprovante/Recibo.</div>}
               {category === "Emissão de Documento" && <div className="bg-green-100 p-2 text-[11px] text-green-800 rounded mb-2 border border-green-200 font-bold">⚠️ Obrigatório anexar a OV.</div>}
               {category === "Divergência" && <div className="bg-orange-100 p-2 text-[11px] text-orange-800 rounded mb-2 border border-orange-200 font-bold">⚠️ Se possível, anexe foto ou evidência da divergência.</div>}
