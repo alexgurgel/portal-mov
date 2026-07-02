@@ -56,6 +56,10 @@ export default function TicketDetails() {
   const [obsGlobal, setObsGlobal] = useState("")
   const [docReferenciaIdx, setDocReferenciaIdx] = useState("")
 
+  const [registroNFModalOpen, setRegistroNFModalOpen] = useState(false)
+  const [docNFIdx, setDocNFIdx] = useState("")
+  const [obsRegistroNF, setObsRegistroNF] = useState("")
+
   useEffect(() => {
     async function fetchData() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -289,16 +293,38 @@ export default function TicketDetails() {
       } catch (err: any) { alert(err.message) }
   }
 
+  // --- FASE 1 DO REEMBOLSO: registra a NF e avança para em_andamento ---
+  async function confirmarRegistroNF() {
+    if (docNFIdx === "") return alert("Selecione qual anexo é a Nota Fiscal de referência.")
+    const anexosTicket = ticket.custom_data?.anexos || []
+    const anexoUnicoTicket = ticket.custom_data?.url_arquivo_anexo
+        ? [{ nome: ticket.custom_data.nome_arquivo_anexo || 'Arquivo', url: ticket.custom_data.url_arquivo_anexo }]
+        : []
+    const listaAnexos = anexosTicket.length > 0 ? anexosTicket : anexoUnicoTicket
+    const docNF = listaAnexos[Number(docNFIdx)]
+    const novoCustomData = {
+        ...ticket.custom_data,
+        doc_referencia_nf: docNF,
+        fase_atual: 2,
+        responsavel_fase1: currentUserName,
+        data_fase1: new Date().toISOString(),
+        ...(obsRegistroNF ? { obs_fase1: obsRegistroNF } : {})
+    }
+    const { error } = await supabase.from('tickets').update({ status: 'em_andamento', custom_data: novoCustomData }).eq('id', ticket.id)
+    if (!error) {
+        setTicket({ ...ticket, status: 'em_andamento', custom_data: novoCustomData })
+        setRegistroNFModalOpen(false)
+        alert("NF registrada! O chamado avançou para a Fase 2 – Em Processamento.")
+    } else {
+        alert("Erro ao registrar NF: " + error.message)
+    }
+  }
+
   // --- LÓGICA DE CONCLUIR DEFINITIVO (FASE 2 E GERAL) ---
   async function confirmarResolucaoGlobal() {
     // TRAVA DE SEGURANÇA: Obriga o Faturamento a anexar o arquivo na Fase 2
     if (ticket?.category === "Devolução Locação" && !arquivoGlobal) {
         return alert("Erro: É obrigatório anexar o documento/faturamento emitido para concluir o ticket!")
-    }
-
-    // TRAVA DE SEGURANÇA: Obriga o Financeiro a indicar a NF de referência do reembolso
-    if (ticket?.category === "Solicitação de Reembolso" && docReferenciaIdx === "") {
-        return alert("Erro: Selecione qual anexo é o documento de referência (NF) para concluir!")
     }
 
     try {
@@ -446,18 +472,50 @@ export default function TicketDetails() {
           </div>
       )}
 
-      {/* BANNER DE FASE (SOLICITAÇÃO DE REEMBOLSO) */}
+      {/* BANNER FASE 1 (REEMBOLSO: Aguardando entrada NF) */}
       {isReembolso && ticket.status === 'aberto' && (
           <div className="p-4 rounded shadow-sm border-l-4 bg-amber-50 border-amber-500">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                      <FastForward className="text-amber-600 mt-1 shrink-0" />
+                      <div>
+                          <h3 className="font-bold text-amber-800">Fase 1 — Aguardando Entrada de NF</h3>
+                          <p className="text-sm mt-1 text-amber-900">
+                              Identifique nos anexos qual documento é a Nota Fiscal de referência e registre para avançar para a Fase 2.
+                          </p>
+                      </div>
+                  </div>
+                  {podeAgirNaFase('Financeiro') && (
+                      <Button
+                          onClick={() => { setDocNFIdx(""); setObsRegistroNF(""); setRegistroNFModalOpen(true) }}
+                          className="bg-amber-600 hover:bg-amber-700 text-white gap-2 font-bold shrink-0"
+                      >
+                          <CheckCircle2 size={16} /> Registrar NF Recebida
+                      </Button>
+                  )}
+              </div>
+          </div>
+      )}
+
+      {/* BANNER FASE 2 (REEMBOLSO: NF Registrada – Em Processamento) */}
+      {isReembolso && ticket.status === 'em_andamento' && (
+          <div className="p-4 rounded shadow-sm border-l-4 bg-indigo-50 border-indigo-500">
               <div className="flex items-start gap-3">
-                  <FastForward className="text-amber-600" />
+                  <FastForward className="text-indigo-600 mt-1 shrink-0" />
                   <div>
-                      <h3 className="font-bold text-amber-800">
-                          Fase Atual: {getDisplayStatus(ticket).label}
-                      </h3>
-                      <p className="text-sm mt-1 text-amber-900">
-                          O setor Financeiro precisa lançar a Nota Fiscal referente a este reembolso e indicar o anexo correspondente ao concluir o chamado.
-                      </p>
+                      <h3 className="font-bold text-indigo-800">Fase 2 — NF Registrada, Em Processamento</h3>
+                      {ticket.custom_data?.doc_referencia_nf && (
+                          <p className="text-sm mt-1 text-indigo-900 flex items-center gap-1">
+                              <Paperclip size={14}/> NF de referência: <a href={ticket.custom_data.doc_referencia_nf.url} target="_blank" rel="noopener noreferrer" className="underline font-semibold">{ticket.custom_data.doc_referencia_nf.nome}</a>
+                          </p>
+                      )}
+                      {ticket.custom_data?.responsavel_fase1 && (
+                          <p className="text-xs text-indigo-700 mt-1 font-semibold">
+                              ✓ Fase 1 registrada por: {ticket.custom_data.responsavel_fase1}
+                              {ticket.custom_data?.obs_fase1 && ` — "${ticket.custom_data.obs_fase1}"`}
+                          </p>
+                      )}
+                      <p className="text-sm mt-2 text-indigo-900">Conclua o processamento do reembolso pelo botão abaixo.</p>
                   </div>
               </div>
           </div>
@@ -759,6 +817,12 @@ export default function TicketDetails() {
                                         <UploadCloud size={16} /> Anexar Documento e Concluir Devolução
                                     </Button>
                                 )
+                            ) : isReembolso ? (
+                                ticket.status === 'em_andamento' && podeAgirNaFase('Financeiro') ? (
+                                    <Button onClick={handleOpenGlobalResolve} className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2 font-bold">
+                                        <CheckCircle2 size={16} /> Concluir Reembolso
+                                    </Button>
+                                ) : null
                             ) : (
                                 <Button onClick={handleOpenGlobalResolve} className="bg-green-600 hover:bg-green-700 text-white gap-2">
                                     <CheckCircle2 size={16} /> Resolver Solicitação
@@ -829,30 +893,19 @@ export default function TicketDetails() {
       <Dialog open={globalResolveModalOpen} onOpenChange={setGlobalResolveModalOpen}>
         <DialogContent>
             <DialogHeader>
-                <DialogTitle>{isDevolucaoLocacao ? "Fase 2: Faturamento - Lançar Documento" : "Finalizar Solicitação"}</DialogTitle>
+                <DialogTitle>
+                    {isDevolucaoLocacao ? "Fase 2: Faturamento - Lançar Documento"
+                    : isReembolso ? "Fase 2: Concluir Reembolso"
+                    : "Finalizar Solicitação"}
+                </DialogTitle>
             </DialogHeader>
             <div className="py-4 space-y-4">
-                <div><Label>Observações</Label><Textarea value={obsGlobal} onChange={e => setObsGlobal(e.target.value)} /></div>
-                {isReembolso && (
-                    <div className="border-t pt-4 mt-2">
-                        <Label className="mb-2 block text-amber-800 font-bold text-xs uppercase">
-                            Documento de referência (NF) *
-                        </Label>
-                        <Select value={docReferenciaIdx} onValueChange={setDocReferenciaIdx}>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Selecione o anexo correspondente à NF" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {listaExibicao.map((anexo: any, idx: number) => (
-                                    <SelectItem key={idx} value={String(idx)}>{anexo.nome}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        {listaExibicao.length === 0 && (
-                            <p className="text-[11px] text-red-500 font-bold mt-1">Nenhum anexo encontrado neste chamado.</p>
-                        )}
+                {isReembolso && ticket?.custom_data?.doc_referencia_nf && (
+                    <div className="bg-indigo-50 border border-indigo-200 rounded p-3 text-sm text-indigo-800 flex items-center gap-2">
+                        <Paperclip size={14}/> NF de referência registrada na Fase 1: <span className="font-bold">{ticket.custom_data.doc_referencia_nf.nome}</span>
                     </div>
                 )}
+                <div><Label>Observações</Label><Textarea value={obsGlobal} onChange={e => setObsGlobal(e.target.value)} /></div>
                 <div className="border-t pt-4 mt-2">
                     <Label className="flex items-center gap-2 mb-2 text-green-800 font-bold text-xs uppercase">
                         <UploadCloud size={14}/> Anexar Arquivo Final {isDevolucaoLocacao && "*"}
@@ -864,6 +917,46 @@ export default function TicketDetails() {
             <DialogFooter>
                 <Button variant="outline" onClick={() => setGlobalResolveModalOpen(false)}>Cancelar</Button>
                 <Button onClick={confirmarResolucaoGlobal} className="bg-green-600 text-white hover:bg-green-700">Concluir</Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL 5: REGISTRO DE NF (FASE 1 REEMBOLSO) */}
+      <Dialog open={registroNFModalOpen} onOpenChange={setRegistroNFModalOpen}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle className="text-amber-700 flex items-center gap-2">
+                    <Paperclip size={18}/> Registrar Nota Fiscal de Referência
+                </DialogTitle>
+                <DialogDescription>Selecione qual dos anexos é a NF deste reembolso. O chamado avançará para a Fase 2.</DialogDescription>
+            </DialogHeader>
+            <div className="py-4 space-y-4">
+                <div>
+                    <Label className="mb-2 block font-bold text-amber-800 text-xs uppercase">Qual anexo é a NF de referência? *</Label>
+                    <Select value={docNFIdx} onValueChange={setDocNFIdx}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Selecione o anexo correspondente à NF" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {listaExibicao.map((anexo: any, idx: number) => (
+                                <SelectItem key={idx} value={String(idx)}>{anexo.nome}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    {listaExibicao.length === 0 && (
+                        <p className="text-[11px] text-red-500 font-bold mt-1">Nenhum anexo encontrado neste chamado. O solicitante deve ter anexado o documento na abertura.</p>
+                    )}
+                </div>
+                <div>
+                    <Label>Observações (opcional)</Label>
+                    <Textarea value={obsRegistroNF} onChange={e => setObsRegistroNF(e.target.value)} placeholder="Ex: NF conferida, valor conforme solicitação..." />
+                </div>
+            </div>
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setRegistroNFModalOpen(false)}>Cancelar</Button>
+                <Button onClick={confirmarRegistroNF} className="bg-amber-600 hover:bg-amber-700 text-white font-bold">
+                    <CheckCircle2 size={16} className="mr-1"/> Registrar NF e Avançar
+                </Button>
             </DialogFooter>
         </DialogContent>
       </Dialog>
