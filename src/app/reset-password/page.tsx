@@ -60,7 +60,7 @@ export default function ResetPassword() {
       <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8">
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold text-gray-800">Definir nova senha</h1>
-          <p className="text-gray-500 text-sm mt-1">Grupo MOV Helpdesk</p>
+          <p className="text-gray-500 text-sm mt-1">Grupo MOV | Portal de Serviços</p>
         </div>
 
         {message && (

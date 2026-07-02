@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Grupo MOV | Helpdesk",
+  title: "Grupo MOV | Portal de Serviços",
   description: "Sistema de solicitações internas do Grupo MOV",
 };
 

@@ -49,7 +49,7 @@ export default function LoginPage() {
         {/* Cabeçalho do Card */}
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Grupo MOV</h1>
-          <p className="text-gray-500 mt-2">Helpdesk e Solicitações Internas</p>
+          <p className="text-gray-500 mt-2">Portal de Serviços</p>
         </div>
 
         {/* Mensagem de Erro (se houver) */}
