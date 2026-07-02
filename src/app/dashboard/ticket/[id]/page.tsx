@@ -120,12 +120,12 @@ export default function TicketDetails() {
   const podeAgirNaFase = (setorDaFase: string) => userRole === 'admin' || userDepartmentName === setorDaFase
 
   // --- LÓGICA GENÉRICA DE AVANÇO DE FASE (NOVA LOCAÇÃO - 10 FASES) ---
-  async function avancarFase(dadosEstagio: any, chaveEstagio: string | null, anexosEstagio?: Array<{ nome: string; url: string; campo?: string }>) {
+  async function avancarFase(dadosEstagio: any, chaveEstagio: string | null, anexosEstagio?: Array<{ nome: string; url: string; campo?: string }>, nextFase?: number) {
       if (!ticket) return
 
       const faseAtual = ticket.custom_data?.fase_atual || 1
       const stageDef = getNovaLocacaoStage(ticket)
-      const novaFase = faseAtual + 1
+      const novaFase = nextFase ?? (faseAtual + 1)
 
       const novoHistorico = [
           ...(ticket.custom_data?.historico_estagios || []),

@@ -17,7 +17,7 @@ import { getNovaLocacaoStage } from "@/lib/ticketPhases"
 
 type Anexo = { nome: string; url: string; campo?: string }
 
-type AvancarFn = (dadosEstagio: any, chaveEstagio: string | null, anexosEstagio?: Anexo[]) => Promise<void>
+type AvancarFn = (dadosEstagio: any, chaveEstagio: string | null, anexosEstagio?: Anexo[], nextFase?: number) => Promise<void>
 
 type Props = {
   ticket: any
@@ -228,7 +228,8 @@ function Fase6Form({ uploadFile, onAvancar, submitting, setSubmitting }: CommonP
       await onAvancar(
         { upload_ov: upload, valor_frete: valorFrete, tipo_frete: tipoFrete },
         'estagio_4',
-        [{ ...upload, campo: 'upload_ov' }]
+        [{ ...upload, campo: 'upload_ov' }],
+        9
       )
     } catch (err: any) {
       alert(err.message)
@@ -262,7 +263,7 @@ function Fase6Form({ uploadFile, onAvancar, submitting, setSubmitting }: CommonP
       </div>
       <div className="flex justify-end">
         <Button onClick={handleSubmit} disabled={submitting} className="bg-purple-600 hover:bg-purple-700 text-white gap-2 font-bold">
-          <ArrowRightCircle size={16} /> Avançar para Carregamento
+          <ArrowRightCircle size={16} /> Avançar para Cadastro do Contrato
         </Button>
       </div>
     </StageCard>
@@ -280,13 +281,13 @@ function Fase7Form({ ticket, onAvancar, submitting, setSubmitting }: CommonProps
   }
 
   return (
-    <StageCard title="Estágio 4 — Frota: Carregamento" subtitle="Emissão da NF de remessa e carregamento do equipamento.">
+    <StageCard title="Estágio 4 — Frota: Carregamento" subtitle="A NF de remessa já foi emitida pelo Faturamento (Estágio 5). Confirme o carregamento.">
       <p className="text-sm text-gray-700">
-        Quando a NF de remessa for emitida e o equipamento carregado, confirme para avançar.
+        Com a NF de remessa já emitida, confirme que o equipamento foi carregado para avançar para a entrega.
       </p>
       <div className="flex justify-end">
         <Button onClick={handleClick} disabled={submitting} className="bg-purple-600 hover:bg-purple-700 text-white gap-2 font-bold">
-          <ArrowRightCircle size={16} /> Avançar para Equipamento Entregue
+          <ArrowRightCircle size={16} /> Confirmar Carregamento
         </Button>
       </div>
     </StageCard>
@@ -299,7 +300,9 @@ function Fase8Form({ ticket, onAvancar, submitting, setSubmitting }: CommonProps
     try {
       await onAvancar(
         { ...(ticket.custom_data?.estagio_4 || {}), data_inicio_periodo_locacao: new Date().toISOString() },
-        'estagio_4'
+        'estagio_4',
+        undefined,
+        10
       )
     } finally {
       setSubmitting(false)
@@ -353,7 +356,7 @@ function Fase9Form({ ticket, uploadFile, onAvancar, submitting, setSubmitting }:
         data_inicio_cobranca: dataInicioCobranca,
         valor_frete_ref: estagio4.valor_frete,
         tipo_frete_ref: estagio4.tipo_frete,
-      }, 'estagio_5', anexos)
+      }, 'estagio_5', anexos, 7)
     } catch (err: any) {
       alert(err.message)
     } finally {
@@ -406,7 +409,7 @@ function Fase9Form({ ticket, uploadFile, onAvancar, submitting, setSubmitting }:
 
       <div className="flex justify-end">
         <Button onClick={handleSubmit} disabled={submitting} className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2 font-bold">
-          <ArrowRightCircle size={16} /> Avançar para Faturamento
+          <ArrowRightCircle size={16} /> Avançar para Carregamento
         </Button>
       </div>
     </StageCard>

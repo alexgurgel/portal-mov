@@ -304,7 +304,7 @@ export function NewTicket() {
         requester_name: requesterName,
         custom_data: {
           ...formData,
-          fase_atual: (category === "Devolução Locação" || category === "Solicitação de Reembolso" || category === "Nova Locação") ? 1 : undefined,
+          fase_atual: category === "Nova Locação" ? 2 : (category === "Devolução Locação" || category === "Solicitação de Reembolso") ? 1 : undefined,
           documentos_estagio1: category === "Nova Locação" ? documentosEstagio1 : undefined,
           historico_estagios: category === "Nova Locação" ? [] : undefined,
           itens_tabela: category === "Compra" || category === "Cotação" ? items : null,
