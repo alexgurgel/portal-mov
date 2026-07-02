@@ -180,13 +180,14 @@ export default function TicketDetails() {
         let dadosArquivo = null
         if (arquivoBaixa) dadosArquivo = await uploadFile(arquivoBaixa)
 
-        const novosItens = [...ticket.custom_data.itens_tabela]
+        const chaveItens = ticket.category === 'Baixa Revenda' ? 'itens_baixa' : 'itens_tabela'
+        const novosItens = [...(ticket.custom_data[chaveItens] || [])]
         novosItens[selectedItemIndex] = {
             ...novosItens[selectedItemIndex],
-            status: 'concluido', 
+            status: 'concluido',
             resolucao: {
                 data_baixa: new Date().toISOString(),
-                responsavel: currentUserName, 
+                responsavel: currentUserName,
                 ...resolutionData,
                 arquivo: dadosArquivo
             }
@@ -194,12 +195,12 @@ export default function TicketDetails() {
 
         const todosProcessados = novosItens.every((item: any) => item.status === 'concluido' || item.status === 'devolvido')
         const todosDevolvidos = novosItens.every((item: any) => item.status === 'devolvido')
-        
-        const novoStatusTicket = todosProcessados 
-            ? (todosDevolvidos ? 'devolvida' : 'resolvido') 
+
+        const novoStatusTicket = todosProcessados
+            ? (todosDevolvidos ? 'devolvida' : 'resolvido')
             : 'em_andamento'
-        
-        const novoCustomData = { ...ticket.custom_data, itens_tabela: novosItens }
+
+        const novoCustomData = { ...ticket.custom_data, [chaveItens]: novosItens }
 
         const { error } = await supabase.from('tickets').update({ custom_data: novoCustomData, status: novoStatusTicket }).eq('id', ticket.id)
 
@@ -225,25 +226,26 @@ export default function TicketDetails() {
       if (!itemReturnReason.trim()) return alert("Informe o motivo da devolução deste item.")
 
       try {
-        const novosItens = [...ticket.custom_data.itens_tabela]
+        const chaveItens = ticket.category === 'Baixa Revenda' ? 'itens_baixa' : 'itens_tabela'
+        const novosItens = [...(ticket.custom_data[chaveItens] || [])]
         novosItens[selectedItemIndex] = {
             ...novosItens[selectedItemIndex],
-            status: 'devolvido', 
+            status: 'devolvido',
             resolucao: {
                 data_baixa: new Date().toISOString(),
                 motivo_devolucao: itemReturnReason,
-                responsavel: currentUserName 
+                responsavel: currentUserName
             }
         }
 
         const todosProcessados = novosItens.every((item: any) => item.status === 'concluido' || item.status === 'devolvido')
         const todosDevolvidos = novosItens.every((item: any) => item.status === 'devolvido')
-        
-        const novoStatusTicket = todosProcessados 
-            ? (todosDevolvidos ? 'devolvida' : 'resolvido') 
+
+        const novoStatusTicket = todosProcessados
+            ? (todosDevolvidos ? 'devolvida' : 'resolvido')
             : 'em_andamento'
-        
-        const novoCustomData = { ...ticket.custom_data, itens_tabela: novosItens }
+
+        const novoCustomData = { ...ticket.custom_data, [chaveItens]: novosItens }
 
         const { error } = await supabase.from('tickets').update({ custom_data: novoCustomData, status: novoStatusTicket }).eq('id', ticket.id)
 
@@ -384,11 +386,14 @@ export default function TicketDetails() {
   if (!ticket) return <div className="p-10 text-center text-red-500 font-bold">Ticket não encontrado.</div>
 
   const itensTabela = ticket.custom_data?.itens_tabela
+  const isBaixaRevenda = ticket.category === "Baixa Revenda"
+  const itensBaixa: any[] = ticket.custom_data?.itens_baixa || []
   const anexos = ticket.custom_data?.anexos || []
   const anexoUnico = ticket.custom_data?.url_arquivo_anexo ? [{ nome: ticket.custom_data.nome_arquivo_anexo || 'Arquivo', url: ticket.custom_data.url_arquivo_anexo }] : []
   const listaExibicao = anexos.length > 0 ? anexos : anexoUnico
 
-  const pendencias = itensTabela?.filter((i: any) => i.status !== 'concluido' && i.status !== 'devolvido').length || 0
+  const todosItens = isBaixaRevenda ? itensBaixa : (itensTabela || [])
+  const pendencias = todosItens.filter((i: any) => i.status !== 'concluido' && i.status !== 'devolvido').length
   const resolucaoGlobal = ticket.custom_data?.resolucao_global
 
   const isDevolucaoLocacao = ticket.category === "Devolução Locação"
@@ -527,7 +532,7 @@ export default function TicketDetails() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="md:col-span-3 space-y-6">
 
-            {ticket.status !== 'resolvido' && ticket.status !== 'devolvida' && itensTabela && (
+            {ticket.status !== 'resolvido' && ticket.status !== 'devolvida' && todosItens.length > 0 && (
                 <div className={`p-4 rounded-md flex items-center gap-3 ${pendencias > 0 ? 'bg-blue-50 border border-blue-200' : 'bg-green-50 border border-green-200'}`}>
                     {pendencias > 0 ? <Clock className="text-blue-500" /> : <CheckCircle2 className="text-green-500" />}
                     <div>
@@ -547,7 +552,65 @@ export default function TicketDetails() {
                         <p className="whitespace-pre-wrap break-words">{ticket.description}</p>
                     </div>
 
-                    {itensTabela && Array.isArray(itensTabela) && itensTabela.length > 0 && (
+                    {isBaixaRevenda && itensBaixa.length > 0 && (
+                        <div className="border rounded overflow-hidden">
+                            <div className="bg-rose-50 p-3 text-xs font-bold text-rose-800 border-b grid grid-cols-12 gap-4 items-center">
+                                <div className="col-span-2">Código</div>
+                                <div className="col-span-1 text-center">Qtd</div>
+                                <div className="col-span-3">Requisição</div>
+                                <div className="col-span-2">Data Req.</div>
+                                <div className="col-span-2">Status</div>
+                                <div className="col-span-2 text-center">Ação</div>
+                            </div>
+                            {itensBaixa.map((item: any, idx: number) => {
+                                const isDone = item.status === 'concluido'
+                                const isReturned = item.status === 'devolvido'
+                                return (
+                                    <div key={idx} className={`p-3 text-sm border-b grid grid-cols-12 gap-4 items-center ${isDone ? 'bg-green-50/50' : isReturned ? 'bg-orange-50/50' : 'hover:bg-gray-50'}`}>
+                                        <div className="col-span-2 font-semibold text-gray-800">{item.codigo || '-'}</div>
+                                        <div className="col-span-1 text-center font-bold bg-gray-100 rounded p-1">{item.quantidade || '-'}</div>
+                                        <div className="col-span-3 text-gray-700">{item.requisicao || '-'}</div>
+                                        <div className="col-span-2 text-xs text-gray-500">
+                                            {item.data_requisicao ? new Date(item.data_requisicao + 'T00:00:00').toLocaleDateString('pt-BR') : '-'}
+                                        </div>
+                                        <div className="col-span-2 text-xs">
+                                            {isDone && (
+                                                <div className="text-green-700">
+                                                    <span className="flex items-center gap-1 font-bold"><CheckCircle2 size={12}/> Baixado</span>
+                                                    {item.resolucao?.responsavel && <span className="block text-[10px] text-green-600 font-bold mt-0.5 uppercase">{item.resolucao.responsavel}</span>}
+                                                    {item.resolucao?.valor && <span className="block mt-1 italic">{item.resolucao.valor}</span>}
+                                                </div>
+                                            )}
+                                            {isReturned && (
+                                                <div className="text-orange-700">
+                                                    <span className="flex items-center gap-1 font-bold"><Undo2 size={12}/> Devolvido</span>
+                                                    {item.resolucao?.responsavel && <span className="block text-[10px] text-orange-600 font-bold mt-0.5 uppercase">{item.resolucao.responsavel}</span>}
+                                                    <span className="block mt-1 italic">"{item.resolucao?.motivo_devolucao}"</span>
+                                                </div>
+                                            )}
+                                            {!isDone && !isReturned && (
+                                                <span className="flex items-center gap-1 text-orange-500 font-bold"><Clock size={12}/> Pendente</span>
+                                            )}
+                                        </div>
+                                        <div className="col-span-2 text-center flex flex-col gap-2">
+                                            {!isDone && !isReturned && ticket.status !== 'devolvida' && (
+                                                <>
+                                                    <Button size="sm" onClick={() => abrirModalBaixa(idx)} className="bg-black text-white hover:bg-gray-800 w-full h-7 text-xs">
+                                                        Baixar
+                                                    </Button>
+                                                    <Button size="sm" onClick={() => abrirModalDevolucaoItem(idx)} className="bg-white border border-red-200 text-red-600 hover:bg-red-50 w-full h-7 text-xs">
+                                                        Devolver
+                                                    </Button>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    )}
+
+                    {!isBaixaRevenda && itensTabela && Array.isArray(itensTabela) && itensTabela.length > 0 && (
                         <div className="border rounded overflow-hidden">
                             <div className="bg-gray-100 p-3 text-xs font-bold text-gray-700 border-b grid grid-cols-12 gap-4 items-center">
                                 <div className="col-span-1">Cód</div>
@@ -613,7 +676,7 @@ export default function TicketDetails() {
                     {ticket.custom_data && (
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
                             {Object.entries(ticket.custom_data).map(([key, value]) => {
-                                if (['description', 'prioridade', 'itens_tabela', 'nome_arquivo_anexo', 'url_arquivo_anexo', 'motivo_devolucao', 'resolucao_global', 'responsavel_devolucao', 'anexos', 'fase_atual', 'responsavel_fase1', 'data_fase1', 'pats', 'doc_referencia_nf', 'historico_estagios', 'documentos_estagio1', 'devolucao_estagio', 'status_anterior_devolucao'].includes(key)) return null
+                                if (['description', 'prioridade', 'itens_tabela', 'itens_baixa', 'nome_arquivo_anexo', 'url_arquivo_anexo', 'motivo_devolucao', 'resolucao_global', 'responsavel_devolucao', 'anexos', 'fase_atual', 'responsavel_fase1', 'data_fase1', 'pats', 'doc_referencia_nf', 'historico_estagios', 'documentos_estagio1', 'devolucao_estagio', 'status_anterior_devolucao'].includes(key)) return null
                                 if (!value || typeof value === 'object') return null
                                 return (
                                     <div key={key} className="bg-white p-3 rounded border shadow-sm max-h-60 overflow-y-auto">
@@ -685,7 +748,7 @@ export default function TicketDetails() {
                             <Undo2 size={16} /> Devolver Tudo
                         </Button>
                         
-                        {(!itensTabela || itensTabela.length === 0) && !isNovaLocacao && (
+                        {todosItens.length === 0 && !isNovaLocacao && (
                             isDevolucaoLocacao ? (
                                 faseAtual === 1 ? (
                                     <Button onClick={confirmarAvancoFase} className="bg-amber-600 hover:bg-amber-700 text-white gap-2 font-bold shadow-md">
