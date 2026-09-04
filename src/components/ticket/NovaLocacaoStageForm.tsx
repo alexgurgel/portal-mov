@@ -386,6 +386,12 @@ function Fase8Form({ ticket, onAvancar, submitting, setSubmitting }: CommonProps
   // contrato (ticket #1905).
   const [dataInicio, setDataInicio] = useState(estagio4.data_inicio_locacao || "")
 
+  // A NF de remessa chega sozinha quando o Faturamento conclui o chamado de
+  // emissão aberto na preparação (ticket #1914).
+  const nfRemessa = estagio4.nf_remessa
+  const emissaoTicketId = ticket.custom_data?.emissao_ticket_id
+  const aguardandoNf = !!emissaoTicketId && !nfRemessa
+
   const handleClick = async () => {
     if (!dataInicio) return alert("Informe a data de início da locação.")
 
@@ -398,10 +404,28 @@ function Fase8Form({ ticket, onAvancar, submitting, setSubmitting }: CommonProps
   }
 
   return (
-    <StageCard title="Estágio 4 — Frota: Carregamento" subtitle="A NF de remessa já foi emitida pelo Faturamento (Estágio 5). Confirme o carregamento.">
-      <p className="text-sm text-gray-700">
-        Com a NF de remessa já emitida, informe a data de início da locação e confirme o carregamento.
-      </p>
+    <StageCard title="Estágio 4 — Frota: Carregamento" subtitle="Confirme o carregamento com a NF de remessa emitida pelo Faturamento.">
+      {nfRemessa ? (
+        <div className="bg-green-50 border border-green-200 rounded p-3 text-sm text-green-800">
+          <span className="font-bold">NF de remessa nº {nfRemessa.numero} emitida.</span>
+          {nfRemessa.ticket_id && (
+            <a href={`/dashboard/ticket/${nfRemessa.ticket_id}`} className="ml-2 underline text-green-700">
+              ver chamado #{nfRemessa.ticket_id}
+            </a>
+          )}
+        </div>
+      ) : aguardandoNf ? (
+        <div className="bg-amber-50 border border-amber-200 rounded p-3 text-sm text-amber-800">
+          <span className="font-bold">Aguardando o Faturamento emitir a NF de remessa.</span>
+          <a href={`/dashboard/ticket/${emissaoTicketId}`} className="ml-2 underline text-amber-700">
+            acompanhar chamado #{emissaoTicketId}
+          </a>
+          <p className="text-xs mt-1">
+            Assim que o chamado for concluído, o número da NF aparece aqui e o carregamento é liberado.
+          </p>
+        </div>
+      ) : null}
+
       <div className="grid gap-3 md:grid-cols-2">
         <div>
           <Label className="font-bold">Data de Início da Locação *</Label>
@@ -409,7 +433,11 @@ function Fase8Form({ ticket, onAvancar, submitting, setSubmitting }: CommonProps
         </div>
       </div>
       <div className="flex justify-end">
-        <Button onClick={handleClick} disabled={submitting} className="bg-purple-600 hover:bg-purple-700 text-white gap-2 font-bold">
+        <Button
+          onClick={handleClick}
+          disabled={submitting || aguardandoNf}
+          className="bg-purple-600 hover:bg-purple-700 text-white gap-2 font-bold disabled:opacity-50"
+        >
           <ArrowRightCircle size={16} /> Confirmar Carregamento
         </Button>
       </div>

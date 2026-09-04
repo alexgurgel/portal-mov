@@ -62,6 +62,7 @@ export default function TicketDetails() {
   const [globalResolveModalOpen, setGlobalResolveModalOpen] = useState(false)
   const [arquivoGlobal, setArquivoGlobal] = useState<File | null>(null)
   const [obsGlobal, setObsGlobal] = useState("")
+  const [numeroNfRemessa, setNumeroNfRemessa] = useState("")
   const [docReferenciaIdx, setDocReferenciaIdx] = useState("")
 
   const [registroNFModalOpen, setRegistroNFModalOpen] = useState(false)
@@ -127,7 +128,43 @@ export default function TicketDetails() {
 
   const podeAgirNaFase = (setorDaFase: string) => userRole === 'admin' || userDepartmentName === setorDaFase
 
-  // --- LÓGICA GENÉRICA DE AVANÇO DE FASE (NOVA LOCAÇÃO - 10 FASES) ---
+  // Ao enviar a OV para emissão, abre sozinho o chamado da NF de remessa para
+  // o Faturamento e devolve o id para amarrar os dois chamados (ticket #1914).
+  async function criarTicketEmissaoRemessa(ov: { nome: string; url: string }) {
+      const cd = ticket.custom_data || {}
+      const cliente = cd.cliente || 'Cliente'
+      const estagio4 = cd.estagio_4 || {}
+
+      const { data: novoTicket, error } = await supabase.from('tickets').insert({
+          title: `Doc: Remessa Locação - ${cliente} (Locação #${ticket.id})`,
+          description: `Emissão da NF de remessa da locação #${ticket.id}.\nCliente: ${cliente}${cd.cnpj ? ` | CNPJ: ${cd.cnpj}` : ''}${estagio4.valor_frete ? ` | Frete: ${estagio4.valor_frete} (${estagio4.tipo_frete || '-'})` : ''}\nA OV está anexada neste chamado.`,
+          priority: ticket.priority || 'media',
+          category: 'Emissão de Documento',
+          status: 'aberto',
+          user_id: ticket.user_id,
+          requester_name: currentUserName,
+          custom_data: {
+              tipo_emissao: 'Remessa Locação',
+              origem: 'nova_locacao',
+              locacao_ticket_id: ticket.id,
+              cliente,
+              cnpj: cd.cnpj,
+              prioridade: ticket.priority || 'media',
+              anexos: [ov],
+              nome_arquivo_anexo: ov.nome,
+              url_arquivo_anexo: ov.url,
+          },
+      }).select('id').single()
+
+      if (error) {
+          alert("Atenção: a fase avançou, mas não foi possível abrir o chamado de emissão para o Faturamento: " + error.message)
+          return null
+      }
+
+      return novoTicket?.id ?? null
+  }
+
+  // --- LÓGICA GENÉRICA DE AVANÇO DE FASE (NOVA LOCAÇÃO - 11 FASES) ---
   async function avancarFase(dadosEstagio: any, chaveEstagio: string | null, anexosEstagio?: Array<{ nome: string; url: string; campo?: string }>, nextFase?: number) {
       if (!ticket) return
 
@@ -157,6 +194,15 @@ export default function TicketDetails() {
           novoCustomData[chaveEstagio] = dadosEstagio
       }
 
+      // Saída da Preparação Interna: a OV vai para o Faturamento em um chamado
+      // próprio de Emissão de Documento, criado automaticamente.
+      if (ticket.category === "Nova Locação" && dadosEstagio?.upload_ov && !novoCustomData.emissao_ticket_id) {
+          const emissaoId = await criarTicketEmissaoRemessa(dadosEstagio.upload_ov)
+          if (emissaoId) {
+              novoCustomData.emissao_ticket_id = emissaoId
+          }
+      }
+
       const novoStatus = novaFase > NOVA_LOCACAO_STAGES.length
           ? 'resolvido'
           : (ticket.status === 'aberto' ? 'em_andamento' : ticket.status)
@@ -168,6 +214,8 @@ export default function TicketDetails() {
           if (novoStatus === 'resolvido') {
               alert("Locação concluída e baixada com sucesso!")
               router.push('/dashboard')
+          } else if (novoCustomData.emissao_ticket_id && !ticket.custom_data?.emissao_ticket_id) {
+              alert(`Fase avançada! Chamado #${novoCustomData.emissao_ticket_id} aberto para o Faturamento emitir a NF de remessa.`)
           } else {
               alert("Fase avançada com sucesso!")
           }
@@ -277,6 +325,7 @@ export default function TicketDetails() {
       setObsGlobal("")
       setArquivoGlobal(null)
       setDocReferenciaIdx("")
+      setNumeroNfRemessa("")
       setGlobalResolveModalOpen(true)
   }
 
@@ -331,6 +380,12 @@ export default function TicketDetails() {
   // --- LÓGICA DE CONCLUIR DEFINITIVO (FASE 2 E GERAL) ---
   // O anexo comprobatório é opcional: fica a critério do atendente (ticket #1904).
   async function confirmarResolucaoGlobal() {
+    // Chamado aberto automaticamente por uma Nova Locação: o número da NF de
+    // remessa volta para o chamado de locação (ticket #1914).
+    if (isEmissaoDeLocacao && !numeroNfRemessa.trim()) {
+        return alert("Informe o número da NF de remessa emitida.")
+    }
+
     try {
         let dadosArquivo = null
         if (arquivoGlobal) dadosArquivo = await uploadFile(arquivoGlobal)
@@ -342,6 +397,7 @@ export default function TicketDetails() {
         const novoCustomData = {
             ...ticket.custom_data,
             ...(docReferenciaNf ? { doc_referencia_nf: docReferenciaNf } : {}),
+            ...(isEmissaoDeLocacao ? { numero_nf_remessa: numeroNfRemessa.trim() } : {}),
             resolucao_global: {
                 data_resolucao: new Date().toISOString(),
                 obs: obsGlobal,
@@ -430,6 +486,9 @@ export default function TicketDetails() {
   const isReembolso = ticket.category === "Solicitação de Reembolso"
   const isNovaLocacao = ticket.category === "Nova Locação"
   const faseAtual = ticket.custom_data?.fase_atual || 1
+
+  // Chamado de emissão criado automaticamente a partir de uma Nova Locação
+  const isEmissaoDeLocacao = ticket.custom_data?.origem === 'nova_locacao' && !!ticket.custom_data?.locacao_ticket_id
 
   const devolucaoEstagio = ticket.custom_data?.devolucao_estagio
   const podeReabrirNovaLocacao = isNovaLocacao && ticket.status === 'devolvida' && devolucaoEstagio &&
@@ -918,6 +977,20 @@ export default function TicketDetails() {
                 {isReembolso && ticket?.custom_data?.doc_referencia_nf && (
                     <div className="bg-indigo-50 border border-indigo-200 rounded p-3 text-sm text-indigo-800 flex items-center gap-2">
                         <Paperclip size={14}/> NF de referência registrada na Fase 1: <span className="font-bold">{ticket.custom_data.doc_referencia_nf.nome}</span>
+                    </div>
+                )}
+                {isEmissaoDeLocacao && (
+                    <div className="bg-purple-50 border border-purple-200 rounded p-3 space-y-2">
+                        <p className="text-xs font-bold text-purple-800 uppercase">
+                            Emissão da locação #{ticket.custom_data.locacao_ticket_id}
+                        </p>
+                        <div>
+                            <Label className="font-bold">Nº da NF de Remessa *</Label>
+                            <Input value={numeroNfRemessa} onChange={e => setNumeroNfRemessa(e.target.value)} placeholder="Número da NF emitida" />
+                        </div>
+                        <p className="text-[11px] text-purple-700">
+                            Ao concluir, o número volta automaticamente para o chamado de locação e libera o carregamento para a Frota.
+                        </p>
                     </div>
                 )}
                 <div><Label>Observações</Label><Textarea value={obsGlobal} onChange={e => setObsGlobal(e.target.value)} /></div>
