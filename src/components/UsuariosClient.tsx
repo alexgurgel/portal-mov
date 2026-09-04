@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import { Input } from "@/components/ui/input"
-import { Search, ShieldAlert } from "lucide-react"
+import { Search, ShieldAlert, UserCheck, UserX } from "lucide-react"
 import {
   Select,
   SelectContent,
@@ -18,6 +18,7 @@ type Profile = {
   email: string | null
   role: string
   department_id: number | null
+  ativo: boolean
 }
 
 type Department = {
@@ -39,6 +40,8 @@ export default function UsuariosClient() {
   const [searchTerm, setSearchTerm] = useState("")
   const [departmentFilter, setDepartmentFilter] = useState("todos")
   const [roleFilter, setRoleFilter] = useState("todas")
+  const [statusFilter, setStatusFilter] = useState("todos")
+  const [currentUserId, setCurrentUserId] = useState("")
 
   useEffect(() => {
     async function init() {
@@ -60,6 +63,7 @@ export default function UsuariosClient() {
       }
 
       setAuthorized(true)
+      setCurrentUserId(user.id)
 
       const [{ data: profilesData }, { data: departmentsData }] = await Promise.all([
         supabase.from('profiles').select('*').order('full_name'),
@@ -84,6 +88,26 @@ export default function UsuariosClient() {
     await supabase.from('profiles').update({ department_id }).eq('id', id)
   }
 
+  // Inativar bloqueia o login do usuário (ex-funcionários) sem apagar o
+  // histórico de chamados abertos por ele.
+  async function updateAtivo(profile: Profile, ativo: boolean) {
+    if (profile.id === currentUserId) {
+      return alert("Você não pode inativar o seu próprio usuário.")
+    }
+
+    const nome = profile.full_name || profile.email || 'este usuário'
+    if (!ativo && !confirm(`Inativar ${nome}? A pessoa perde o acesso ao portal no próximo login, mas os chamados dela continuam no sistema.`)) {
+      return
+    }
+
+    setProfiles(prev => prev.map(p => p.id === profile.id ? { ...p, ativo } : p))
+    const { error } = await supabase.from('profiles').update({ ativo }).eq('id', profile.id)
+    if (error) {
+      setProfiles(prev => prev.map(p => p.id === profile.id ? { ...p, ativo: !ativo } : p))
+      alert("Erro ao alterar o status: " + error.message)
+    }
+  }
+
   const nomeSetor = (departmentId: number | null) =>
     departments.find(d => d.id === departmentId)?.name || ''
 
@@ -104,10 +128,17 @@ export default function UsuariosClient() {
 
     const matchPermissao = roleFilter === 'todas' || p.role === roleFilter
 
-    return matchBusca && matchSetor && matchPermissao
+    const matchStatus =
+      statusFilter === 'todos' ||
+      (statusFilter === 'ativos' ? p.ativo !== false : p.ativo === false)
+
+    return matchBusca && matchSetor && matchPermissao && matchStatus
   })
 
-  const temFiltroAtivo = searchTerm !== '' || departmentFilter !== 'todos' || roleFilter !== 'todas'
+  const inativosCount = profiles.filter(p => p.ativo === false).length
+
+  const temFiltroAtivo =
+    searchTerm !== '' || departmentFilter !== 'todos' || roleFilter !== 'todas' || statusFilter !== 'todos'
 
   if (loading) {
     return <div className="p-10 text-center text-gray-400 text-sm">Carregando...</div>
@@ -172,15 +203,30 @@ export default function UsuariosClient() {
               </SelectContent>
             </Select>
           </div>
+
+          <div className="w-full md:w-44">
+            <label className="text-xs font-bold text-gray-500 mb-1 block">Status</label>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="bg-gray-50"><SelectValue placeholder="Todos" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos</SelectItem>
+                <SelectItem value="ativos">Somente ativos</SelectItem>
+                <SelectItem value="inativos">Somente inativos</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         <div className="flex items-center justify-between gap-2">
           <span className="text-xs text-gray-500 font-medium">
             {filtered.length} {filtered.length === 1 ? 'usuário encontrado' : 'usuários encontrados'}
+            {inativosCount > 0 && (
+              <span className="text-gray-400"> · {inativosCount} inativo{inativosCount > 1 ? 's' : ''} no total</span>
+            )}
           </span>
           {temFiltroAtivo && (
             <button
-              onClick={() => { setSearchTerm(''); setDepartmentFilter('todos'); setRoleFilter('todas') }}
+              onClick={() => { setSearchTerm(''); setDepartmentFilter('todos'); setRoleFilter('todas'); setStatusFilter('todos') }}
               className="text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded transition-colors"
             >
               Limpar Filtros
@@ -198,19 +244,24 @@ export default function UsuariosClient() {
                 <th className="px-4 py-3">E-mail</th>
                 <th className="px-4 py-3 w-[200px]">Setor</th>
                 <th className="px-4 py-3 w-[180px]">Permissão</th>
+                <th className="px-4 py-3 w-[170px]">Acesso</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-10 text-center text-gray-400">
+                  <td colSpan={5} className="px-4 py-10 text-center text-gray-400">
                     Nenhum usuário encontrado.
                   </td>
                 </tr>
               ) : filtered.map(profile => (
-                <tr key={profile.id} className="border-b hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-900">{profile.full_name || '—'}</td>
-                  <td className="px-4 py-3 text-gray-600">{profile.email}</td>
+                <tr key={profile.id} className={`border-b hover:bg-gray-50 ${profile.ativo === false ? 'bg-gray-50/70 text-gray-400' : ''}`}>
+                  <td className="px-4 py-3 font-medium text-gray-900">
+                    <span className={profile.ativo === false ? 'text-gray-400 line-through' : ''}>
+                      {profile.full_name || '—'}
+                    </span>
+                  </td>
+                  <td className={`px-4 py-3 ${profile.ativo === false ? 'text-gray-400' : 'text-gray-600'}`}>{profile.email}</td>
                   <td className="px-4 py-3">
                     <Select
                       value={profile.department_id ? String(profile.department_id) : "none"}
@@ -238,6 +289,27 @@ export default function UsuariosClient() {
                         ))}
                       </SelectContent>
                     </Select>
+                  </td>
+                  <td className="px-4 py-3">
+                    {profile.id === currentUserId ? (
+                      <span className="text-[11px] text-gray-400 italic">Você</span>
+                    ) : profile.ativo === false ? (
+                      <button
+                        onClick={() => updateAtivo(profile, true)}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-gray-300 bg-white text-gray-600 text-xs font-bold hover:bg-green-50 hover:text-green-700 hover:border-green-300 transition-colors w-full justify-center"
+                        title="Reativar o acesso deste usuário"
+                      >
+                        <UserX size={14} /> Inativo — Reativar
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => updateAtivo(profile, false)}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-green-200 bg-green-50 text-green-700 text-xs font-bold hover:bg-red-50 hover:text-red-700 hover:border-red-200 transition-colors w-full justify-center"
+                        title="Inativar (bloqueia o acesso ao portal)"
+                      >
+                        <UserCheck size={14} /> Ativo — Inativar
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

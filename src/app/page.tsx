@@ -12,12 +12,28 @@ export default function LoginPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const router = useRouter()
 
+  // Usuários inativados pelo admin (ex-funcionários) não entram no portal.
+  const usuarioEstaAtivo = async (userId: string) => {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('ativo')
+      .eq('id', userId)
+      .single()
+
+    return profile?.ativo !== false
+  }
+
   // Verifica se já está logado ao abrir a página
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession()
       if (session) {
-        router.push('/dashboard')
+        if (await usuarioEstaAtivo(session.user.id)) {
+          router.push('/dashboard')
+        } else {
+          await supabase.auth.signOut()
+          setErrorMsg('Seu acesso ao portal foi desativado. Procure o administrador.')
+        }
       }
     }
     checkUser()
@@ -28,7 +44,7 @@ export default function LoginPage() {
     setLoading(true)
     setErrorMsg(null)
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
@@ -36,10 +52,18 @@ export default function LoginPage() {
     if (error) {
       setErrorMsg('Erro ao entrar: Verifique e-mail e senha.')
       setLoading(false)
-    } else {
-      router.push('/dashboard')
-      router.refresh()
+      return
     }
+
+    if (data.user && !(await usuarioEstaAtivo(data.user.id))) {
+      await supabase.auth.signOut()
+      setErrorMsg('Seu acesso ao portal foi desativado. Procure o administrador.')
+      setLoading(false)
+      return
+    }
+
+    router.push('/dashboard')
+    router.refresh()
   }
 
   return (

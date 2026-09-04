@@ -43,9 +43,17 @@ export function Sidebar() {
       if (user?.id) {
         const { data: profile } = await supabase
           .from('profiles')
-          .select('role, department_id')
+          .select('role, department_id, ativo')
           .eq('id', user.id)
           .single()
+
+        // Usuário inativado pelo admin (ex-funcionário) é desconectado.
+        if (profile?.ativo === false) {
+          await supabase.auth.signOut()
+          router.push('/')
+          return
+        }
+
         if (profile?.role) {
           setUserRole(profile.role)
         }
@@ -55,7 +63,7 @@ export function Sidebar() {
       }
     }
     getUser()
-  }, [])
+  }, [router])
 
   async function handleLogout() {
     await supabase.auth.signOut()
