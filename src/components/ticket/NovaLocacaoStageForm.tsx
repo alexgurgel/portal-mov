@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { ArrowRightCircle, CheckCircle2, Lock } from "lucide-react"
-import { getNovaLocacaoStage } from "@/lib/ticketPhases"
+import { getNovaLocacaoStage, isContratoManutencao } from "@/lib/ticketPhases"
 
 type Anexo = { nome: string; url: string; campo?: string }
 
@@ -214,23 +214,20 @@ function Fase3Form({ ticket, uploadFile, onAvancar, submitting, setSubmitting }:
 }
 
 function Fase4Form({ ticket, onAvancar, submitting, setSubmitting }: CommonProps & { ticket: any }) {
-  const estagio3 = ticket.custom_data?.estagio_3 || {}
   const credito = ticket.custom_data?.estagio_3_credito || {}
-  const [dataInicio, setDataInicio] = useState(estagio3.data_inicio_locacao || "")
+  const [observacoes, setObservacoes] = useState(ticket.custom_data?.estagio_3?.observacoes || "")
 
   const handleSubmit = async () => {
-    if (!dataInicio) return alert("Informe a data de início da locação.")
-
     setSubmitting(true)
     try {
-      await onAvancar({ data_inicio_locacao: dataInicio }, 'estagio_3')
+      await onAvancar({ observacoes: observacoes || undefined }, 'estagio_3')
     } finally {
       setSubmitting(false)
     }
   }
 
   return (
-    <StageCard title="Estágio 3 — Contratos: Em Elaboração" subtitle="Crédito já analisado pelo Financeiro. Informe a data de início da locação.">
+    <StageCard title="Estágio 3 — Contratos: Em Elaboração" subtitle="Crédito já analisado pelo Financeiro. Elabore o contrato e avance para a assinatura.">
       {(credito.resultado || credito.codigo_cliente) && (
         <div className="bg-emerald-50 border border-emerald-200 rounded p-3 grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
@@ -250,12 +247,18 @@ function Fase4Form({ ticket, onAvancar, submitting, setSubmitting }: CommonProps
         </div>
       )}
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <div>
-          <Label className="font-bold">Data de Início da Locação *</Label>
-          <Input type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)} />
-        </div>
+      <div>
+        <Label className="font-bold">Observações do Contrato (opcional)</Label>
+        <Textarea
+          value={observacoes}
+          onChange={e => setObservacoes(e.target.value)}
+          placeholder="Anotações sobre a elaboração do contrato"
+          rows={3}
+        />
       </div>
+      <p className="text-xs text-gray-500">
+        A data de início da locação passou a ser informada pela Frota, na etapa de Carregamento.
+      </p>
       <div className="flex justify-end">
         <Button onClick={handleSubmit} disabled={submitting} className="bg-blue-600 hover:bg-blue-700 text-white gap-2 font-bold">
           <ArrowRightCircle size={16} /> Avançar para Assinatura
@@ -290,10 +293,14 @@ function Fase5Form({ ticket, onAvancar, submitting, setSubmitting }: CommonProps
 }
 
 function Fase6Form({ ticket, onAvancar, submitting, setSubmitting }: CommonProps & { ticket: any }) {
+  // Contrato de manutenção não mobiliza equipamento: vai direto para o
+  // Cadastro do Contrato (fase 10), pulando o estágio 4 inteiro.
+  const manutencao = isContratoManutencao(ticket)
+
   const handleClick = async () => {
     setSubmitting(true)
     try {
-      await onAvancar(ticket.custom_data?.estagio_3 || {}, null)
+      await onAvancar(ticket.custom_data?.estagio_3 || {}, null, undefined, manutencao ? 10 : undefined)
     } finally {
       setSubmitting(false)
     }
@@ -302,11 +309,13 @@ function Fase6Form({ ticket, onAvancar, submitting, setSubmitting }: CommonProps
   return (
     <StageCard title="Estágio 3 — Contrato Assinado" subtitle="Contrato assinado e validado pelo setor de Contratos.">
       <p className="text-sm text-gray-700">
-        Avance para liberar o equipamento para a Frota (Mobilização).
+        {manutencao
+          ? 'Contrato de manutenção: sem mobilização de equipamento. Avance direto para o Cadastro do Contrato.'
+          : 'Avance para liberar o equipamento para a Frota (Mobilização).'}
       </p>
       <div className="flex justify-end">
         <Button onClick={handleClick} disabled={submitting} className="bg-blue-600 hover:bg-blue-700 text-white gap-2 font-bold">
-          <ArrowRightCircle size={16} /> Avançar para Frota (Mobilização)
+          <ArrowRightCircle size={16} /> {manutencao ? 'Avançar para Cadastro do Contrato' : 'Avançar para Frota (Mobilização)'}
         </Button>
       </div>
     </StageCard>
@@ -372,10 +381,17 @@ function Fase7Form({ uploadFile, onAvancar, submitting, setSubmitting }: CommonP
 }
 
 function Fase8Form({ ticket, onAvancar, submitting, setSubmitting }: CommonProps & { ticket: any }) {
+  const estagio4 = ticket.custom_data?.estagio_4 || {}
+  // A data de início da locação é informada aqui, não mais na elaboração do
+  // contrato (ticket #1905).
+  const [dataInicio, setDataInicio] = useState(estagio4.data_inicio_locacao || "")
+
   const handleClick = async () => {
+    if (!dataInicio) return alert("Informe a data de início da locação.")
+
     setSubmitting(true)
     try {
-      await onAvancar(ticket.custom_data?.estagio_4 || {}, null)
+      await onAvancar({ ...estagio4, data_inicio_locacao: dataInicio }, 'estagio_4')
     } finally {
       setSubmitting(false)
     }
@@ -384,8 +400,14 @@ function Fase8Form({ ticket, onAvancar, submitting, setSubmitting }: CommonProps
   return (
     <StageCard title="Estágio 4 — Frota: Carregamento" subtitle="A NF de remessa já foi emitida pelo Faturamento (Estágio 5). Confirme o carregamento.">
       <p className="text-sm text-gray-700">
-        Com a NF de remessa já emitida, confirme que o equipamento foi carregado para avançar para a entrega.
+        Com a NF de remessa já emitida, informe a data de início da locação e confirme o carregamento.
       </p>
+      <div className="grid gap-3 md:grid-cols-2">
+        <div>
+          <Label className="font-bold">Data de Início da Locação *</Label>
+          <Input type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)} />
+        </div>
+      </div>
       <div className="flex justify-end">
         <Button onClick={handleClick} disabled={submitting} className="bg-purple-600 hover:bg-purple-700 text-white gap-2 font-bold">
           <ArrowRightCircle size={16} /> Confirmar Carregamento
@@ -427,6 +449,8 @@ function Fase9Form({ ticket, onAvancar, submitting, setSubmitting }: CommonProps
 function Fase10Form({ ticket, uploadFile, onAvancar, submitting, setSubmitting }: CommonProps & { ticket: any; uploadFile: Props['uploadFile'] }) {
   const estagio5 = ticket.custom_data?.estagio_5 || {}
   const estagio4 = ticket.custom_data?.estagio_4 || {}
+  // Sem mobilização, o próximo passo depois do cadastro é o Faturamento.
+  const manutencao = isContratoManutencao(ticket)
   const [numeroContrato, setNumeroContrato] = useState(estagio5.numero_contrato || "")
   const [printContrato, setPrintContrato] = useState<File | null>(null)
   const [emailFatura, setEmailFatura] = useState(estagio5.email_fatura || ticket.custom_data?.email_contato || "")
@@ -457,7 +481,7 @@ function Fase10Form({ ticket, uploadFile, onAvancar, submitting, setSubmitting }
         data_inicio_cobranca: dataInicioCobranca,
         valor_frete_ref: estagio4.valor_frete,
         tipo_frete_ref: estagio4.tipo_frete,
-      }, 'estagio_5', anexos, 8)
+      }, 'estagio_5', anexos, manutencao ? 11 : 8)
     } catch (err: any) {
       alert(err.message)
     } finally {
@@ -510,7 +534,7 @@ function Fase10Form({ ticket, uploadFile, onAvancar, submitting, setSubmitting }
 
       <div className="flex justify-end">
         <Button onClick={handleSubmit} disabled={submitting} className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2 font-bold">
-          <ArrowRightCircle size={16} /> Avançar para Carregamento
+          <ArrowRightCircle size={16} /> {manutencao ? 'Avançar para Faturamento' : 'Avançar para Carregamento'}
         </Button>
       </div>
     </StageCard>

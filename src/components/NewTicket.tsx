@@ -50,7 +50,8 @@ export function NewTicket() {
   ])
   
   const [arquivosParaUpload, setArquivosParaUpload] = useState<File[]>([])
-  const [namedUploads, setNamedUploads] = useState<Record<string, File | null>>({})
+  // Cada slot do Estágio 1 aceita mais de um arquivo (ticket #1905)
+  const [namedUploads, setNamedUploads] = useState<Record<string, File[]>>({})
 
   useEffect(() => {
     async function fetchUser() {
@@ -173,7 +174,7 @@ export function NewTicket() {
         if (camposFaltando.length > 0) {
             return alert(`Preencha todos os campos obrigatórios do Estágio 1 (Cliente, CNPJ, IE, Endereço, Contato).`)
         }
-        const slotsVazios = NAMED_UPLOAD_SLOTS_ESTAGIO1.filter(s => !namedUploads[s.key])
+        const slotsVazios = NAMED_UPLOAD_SLOTS_ESTAGIO1.filter(s => !(namedUploads[s.key]?.length))
         if (slotsVazios.length > 0) {
             return alert(`Anexe todos os documentos do Estágio 1: ${slotsVazios.map(s => s.label).join(', ')}.`)
         }
@@ -208,12 +209,15 @@ export function NewTicket() {
           }
       }
 
-      // Upload dos 4 documentos nomeados do Estágio 1 (Nova Locação)
+      // Upload dos documentos nomeados do Estágio 1 (Nova Locação).
+      // Cada slot guarda uma lista de arquivos.
       const documentosEstagio1: any = {}
       if (category === "Nova Locação") {
           for (const slot of NAMED_UPLOAD_SLOTS_ESTAGIO1) {
-              const arquivo = namedUploads[slot.key]
-              if (arquivo) {
+              const arquivosDoSlot = namedUploads[slot.key] || []
+              const salvos = []
+
+              for (const arquivo of arquivosDoSlot) {
                   const nomeLimpo = sanitizeFileName(arquivo.name)
                   const nomeArquivoUnico = `${Date.now()}-${nomeLimpo}`
 
@@ -222,7 +226,11 @@ export function NewTicket() {
 
                   const { data: dataUrl } = supabase.storage.from('anexos').getPublicUrl(nomeArquivoUnico)
 
-                  documentosEstagio1[slot.key] = { nome: nomeLimpo, url: dataUrl.publicUrl }
+                  salvos.push({ nome: nomeLimpo, url: dataUrl.publicUrl })
+              }
+
+              if (salvos.length > 0) {
+                  documentosEstagio1[slot.key] = salvos
               }
           }
       }
@@ -453,22 +461,82 @@ export function NewTicket() {
             </div>
 
             <div className="bg-white p-3 rounded border border-amber-200 shadow-sm mt-1 space-y-2">
-              <Label className="font-bold block text-amber-900">Documentos do Estágio 1 (todos obrigatórios) *</Label>
-              {NAMED_UPLOAD_SLOTS_ESTAGIO1.map(slot => (
-                <div key={slot.key} className="flex items-center justify-between gap-2 border rounded p-2">
-                  <div>
-                    <span className="text-sm font-medium block">{slot.label}</span>
-                    {namedUploads[slot.key] && (
-                      <span className="text-xs text-green-600">✓ {namedUploads[slot.key]!.name}</span>
+              <Label className="font-bold block text-amber-900">
+                Documentos do Estágio 1 (todos obrigatórios) *
+                <span className="block text-[11px] font-normal text-amber-700 mt-0.5">
+                  Cada documento aceita mais de um arquivo (segure CTRL para selecionar vários).
+                </span>
+              </Label>
+              {NAMED_UPLOAD_SLOTS_ESTAGIO1.map(slot => {
+                const arquivosDoSlot = namedUploads[slot.key] || []
+                return (
+                  <div key={slot.key} className="border rounded p-2 space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium block">{slot.label}</span>
+                      <Input
+                        type="file"
+                        multiple
+                        className="w-auto bg-white text-xs cursor-pointer"
+                        onChange={e => {
+                          const novos = Array.from(e.target.files || [])
+                          if (novos.length === 0) return
+                          setNamedUploads(prev => ({ ...prev, [slot.key]: [...(prev[slot.key] || []), ...novos] }))
+                          e.target.value = ""
+                        }}
+                      />
+                    </div>
+                    {arquivosDoSlot.length > 0 && (
+                      <div className="space-y-1">
+                        {arquivosDoSlot.map((arquivo, idx) => (
+                          <div key={idx} className="flex items-center justify-between bg-green-50 border border-green-100 rounded px-2 py-1">
+                            <span className="text-xs text-green-700 truncate max-w-[280px]">✓ {arquivo.name}</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0 text-red-500"
+                              onClick={() => setNamedUploads(prev => ({
+                                ...prev,
+                                [slot.key]: (prev[slot.key] || []).filter((_, i) => i !== idx),
+                              }))}
+                            >
+                              <X size={13} />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
-                  <Input
-                    type="file"
-                    className="w-auto bg-white text-xs cursor-pointer"
-                    onChange={e => setNamedUploads(prev => ({ ...prev, [slot.key]: e.target.files?.[0] || null }))}
-                  />
-                </div>
-              ))}
+                )
+              })}
+            </div>
+
+            {/* Contrato de manutenção não passa pela mobilização da Frota */}
+            <div className="flex items-start gap-3 bg-white p-3 rounded border border-amber-300">
+              <input
+                type="checkbox"
+                id="contrato_manutencao"
+                className="h-5 w-5 mt-0.5 accent-amber-600 cursor-pointer"
+                checked={formData.contrato_manutencao === 'SIM'}
+                onChange={e => updateForm('contrato_manutencao', e.target.checked ? 'SIM' : 'NÃO')}
+              />
+              <label htmlFor="contrato_manutencao" className="cursor-pointer select-none">
+                <span className="text-sm font-extrabold text-amber-900 block">CONTRATO DE MANUTENÇÃO</span>
+                <span className="text-[11px] text-amber-700">
+                  Marque quando não houver envio de equipamento: o chamado pula as etapas de mobilização da Frota
+                  (preparação, carregamento e entrega) e vai do contrato assinado direto para o cadastro do contrato.
+                </span>
+              </label>
+            </div>
+
+            <div>
+              <Label className="font-bold">Observações / Descrição do Processo</Label>
+              <Textarea
+                className="bg-white"
+                rows={3}
+                placeholder="Descreva o processo quando não se tratar de uma locação nova (ex.: ajustes de contrato, renovação, manutenção...)"
+                onChange={e => updateForm('description', e.target.value)}
+              />
             </div>
           </div>
         )

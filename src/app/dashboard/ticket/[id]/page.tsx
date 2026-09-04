@@ -31,6 +31,14 @@ import NovaLocacaoTracker from "@/components/ticket/NovaLocacaoTracker"
 import NovaLocacaoStageForm from "@/components/ticket/NovaLocacaoStageForm"
 import HistoricoEstagiosTimeline from "@/components/ticket/HistoricoEstagiosTimeline"
 
+// Rótulos dos documentos enviados na abertura da Nova Locação (Estágio 1)
+const DOCUMENTOS_ESTAGIO1_LABELS: Record<string, string> = {
+  proposta_locacao: "Proposta de Locação",
+  contrato_social: "Contrato Social",
+  ie_documento: "IE (Inscrição Estadual)",
+  ficha_cadastro: "Ficha de Cadastro",
+}
+
 export default function TicketDetails() {
   const params = useParams()
   const router = useRouter()
@@ -321,12 +329,8 @@ export default function TicketDetails() {
   }
 
   // --- LÓGICA DE CONCLUIR DEFINITIVO (FASE 2 E GERAL) ---
+  // O anexo comprobatório é opcional: fica a critério do atendente (ticket #1904).
   async function confirmarResolucaoGlobal() {
-    // TRAVA DE SEGURANÇA: Obriga o Faturamento a anexar o arquivo na Fase 2
-    if (ticket?.category === "Devolução Locação" && !arquivoGlobal) {
-        return alert("Erro: É obrigatório anexar o documento/faturamento emitido para concluir o ticket!")
-    }
-
     try {
         let dadosArquivo = null
         if (arquivoGlobal) dadosArquivo = await uploadFile(arquivoGlobal)
@@ -779,19 +783,30 @@ export default function TicketDetails() {
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                {Object.entries(ticket.custom_data.documentos_estagio1).map(([key, doc]: [string, any]) => doc && (
-                                    <div key={key} className="flex items-center justify-between bg-white p-2 rounded border border-amber-100 shadow-sm">
-                                        <span className="text-sm text-gray-600 truncate max-w-[200px]">{doc.nome}</span>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            className="text-amber-700 border-amber-200 hover:bg-amber-50 h-8"
-                                            onClick={() => window.open(doc.url, '_blank')}
-                                        >
-                                            Baixar
-                                        </Button>
-                                    </div>
-                                ))}
+                                {/* Cada tipo de documento pode ter mais de um arquivo;
+                                    chamados antigos guardam um único objeto. */}
+                                {Object.entries(ticket.custom_data.documentos_estagio1).map(([key, doc]: [string, any]) => {
+                                    const arquivos = Array.isArray(doc) ? doc : doc ? [doc] : []
+                                    return arquivos.map((arquivo: any, idx: number) => arquivo && (
+                                        <div key={`${key}-${idx}`} className="flex items-center justify-between bg-white p-2 rounded border border-amber-100 shadow-sm">
+                                            <div className="min-w-0">
+                                                <span className="block text-[10px] font-bold text-amber-600 uppercase">
+                                                    {DOCUMENTOS_ESTAGIO1_LABELS[key] || formatKey(key)}
+                                                    {arquivos.length > 1 ? ` (${idx + 1}/${arquivos.length})` : ''}
+                                                </span>
+                                                <span className="text-sm text-gray-600 truncate block max-w-[200px]">{arquivo.nome}</span>
+                                            </div>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="text-amber-700 border-amber-200 hover:bg-amber-50 h-8"
+                                                onClick={() => window.open(arquivo.url, '_blank')}
+                                            >
+                                                Baixar
+                                            </Button>
+                                        </div>
+                                    ))
+                                })}
                             </div>
                         </div>
                     )}
@@ -908,10 +923,10 @@ export default function TicketDetails() {
                 <div><Label>Observações</Label><Textarea value={obsGlobal} onChange={e => setObsGlobal(e.target.value)} /></div>
                 <div className="border-t pt-4 mt-2">
                     <Label className="flex items-center gap-2 mb-2 text-green-800 font-bold text-xs uppercase">
-                        <UploadCloud size={14}/> Anexar Arquivo Final {isDevolucaoLocacao && "*"}
+                        <UploadCloud size={14}/> Anexar Arquivo Final
                     </Label>
                     <Input type="file" onChange={e => setArquivoGlobal(e.target.files?.[0] || null)} />
-                    {isDevolucaoLocacao && <p className="text-[11px] text-red-500 font-bold mt-1">* O anexo do documento/faturamento é obrigatório para concluir o chamado.</p>}
+                    <p className="text-[11px] text-gray-500 mt-1">Opcional — anexe o comprovante se achar necessário.</p>
                 </div>
             </div>
             <DialogFooter>

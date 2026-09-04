@@ -47,6 +47,14 @@ export const NOVA_LOCACAO_STAGES: NovaLocacaoStageDef[] = [
   { fase: 11, stage: 6, stageLabel: "Faturamento", label: "Faturamento", setor: "Faturamento", colorClass: "bg-pink-100 text-pink-700" },
 ]
 
+// Contrato de manutenção não envia equipamento: pula o estágio 4 inteiro
+// (Frota - Mobilização), indo do contrato assinado direto para o cadastro.
+export const NOVA_LOCACAO_STAGE_MOBILIZACAO = 4
+
+export function isContratoManutencao(ticket: any): boolean {
+  return ticket?.custom_data?.contrato_manutencao === 'SIM'
+}
+
 export function getNovaLocacaoStage(ticket: any): NovaLocacaoStageDef {
   const fase = ticket.custom_data?.fase_atual || 1
   const idx = Math.min(Math.max(fase, 1), NOVA_LOCACAO_STAGES.length) - 1
