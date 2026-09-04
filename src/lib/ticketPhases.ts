@@ -19,9 +19,10 @@ export type DisplayStatus = {
   colorClass: string
 }
 
-// Definição dos 10 estágios lineares do fluxo "Nova Locação".
+// Definição das 11 fases lineares do fluxo "Nova Locação".
 // `stage` (1-6) agrupa visualmente os estágios pedidos pela Viviane;
-// estágios 3 e 4 têm 3 sub-fases cada (subLabel).
+// o estágio 3 tem 4 sub-fases (a 1ª é a análise de crédito, do Financeiro)
+// e o estágio 4 tem 3 sub-fases (subLabel).
 export type NovaLocacaoStageDef = {
   fase: number
   stage: number
@@ -35,14 +36,15 @@ export type NovaLocacaoStageDef = {
 export const NOVA_LOCACAO_STAGES: NovaLocacaoStageDef[] = [
   { fase: 1, stage: 1, stageLabel: "Comercial", label: "Comercial", setor: "Comercial", colorClass: "bg-amber-100 text-amber-700" },
   { fase: 2, stage: 2, stageLabel: "Frota (Validação)", label: "Frota (Validação)", setor: "Comercial", colorClass: "bg-amber-100 text-amber-700" },
-  { fase: 3, stage: 3, stageLabel: "Contratos", subLabel: "Em Elaboração", label: "Contratos: Em Elaboração", setor: "Contratos", colorClass: "bg-blue-100 text-blue-700" },
-  { fase: 4, stage: 3, stageLabel: "Contratos", subLabel: "Assinatura", label: "Contratos: Assinatura", setor: "Contratos", colorClass: "bg-blue-100 text-blue-700" },
-  { fase: 5, stage: 3, stageLabel: "Contratos", subLabel: "Contrato Assinado", label: "Contratos: Contrato Assinado", setor: "Contratos", colorClass: "bg-blue-100 text-blue-700" },
-  { fase: 6, stage: 4, stageLabel: "Frota (Mobilização)", subLabel: "Preparação Interna", label: "Frota: Preparação Interna", setor: "Comercial", colorClass: "bg-purple-100 text-purple-700" },
-  { fase: 7, stage: 4, stageLabel: "Frota (Mobilização)", subLabel: "Carregamento", label: "Frota: Carregamento (NF Remessa)", setor: "Comercial", colorClass: "bg-purple-100 text-purple-700" },
-  { fase: 8, stage: 4, stageLabel: "Frota (Mobilização)", subLabel: "Equipamento Entregue", label: "Frota: Equipamento Entregue", setor: "Comercial", colorClass: "bg-purple-100 text-purple-700" },
-  { fase: 9, stage: 5, stageLabel: "Cadastro do Contrato", label: "Cadastro do Contrato (ADM)", setor: "Contratos", colorClass: "bg-indigo-100 text-indigo-700" },
-  { fase: 10, stage: 6, stageLabel: "Faturamento", label: "Faturamento", setor: "Faturamento", colorClass: "bg-pink-100 text-pink-700" },
+  { fase: 3, stage: 3, stageLabel: "Contratos", subLabel: "Análise de Crédito", label: "Contratos: Análise de Crédito e Cadastro", setor: "Financeiro", colorClass: "bg-emerald-100 text-emerald-700" },
+  { fase: 4, stage: 3, stageLabel: "Contratos", subLabel: "Em Elaboração", label: "Contratos: Em Elaboração", setor: "Contratos", colorClass: "bg-blue-100 text-blue-700" },
+  { fase: 5, stage: 3, stageLabel: "Contratos", subLabel: "Assinatura", label: "Contratos: Assinatura", setor: "Contratos", colorClass: "bg-blue-100 text-blue-700" },
+  { fase: 6, stage: 3, stageLabel: "Contratos", subLabel: "Contrato Assinado", label: "Contratos: Contrato Assinado", setor: "Contratos", colorClass: "bg-blue-100 text-blue-700" },
+  { fase: 7, stage: 4, stageLabel: "Frota (Mobilização)", subLabel: "Preparação Interna", label: "Frota: Preparação Interna", setor: "Comercial", colorClass: "bg-purple-100 text-purple-700" },
+  { fase: 8, stage: 4, stageLabel: "Frota (Mobilização)", subLabel: "Carregamento", label: "Frota: Carregamento (NF Remessa)", setor: "Comercial", colorClass: "bg-purple-100 text-purple-700" },
+  { fase: 9, stage: 4, stageLabel: "Frota (Mobilização)", subLabel: "Equipamento Entregue", label: "Frota: Equipamento Entregue", setor: "Comercial", colorClass: "bg-purple-100 text-purple-700" },
+  { fase: 10, stage: 5, stageLabel: "Cadastro do Contrato", label: "Cadastro do Contrato (ADM)", setor: "Contratos", colorClass: "bg-indigo-100 text-indigo-700" },
+  { fase: 11, stage: 6, stageLabel: "Faturamento", label: "Faturamento", setor: "Faturamento", colorClass: "bg-pink-100 text-pink-700" },
 ]
 
 export function getNovaLocacaoStage(ticket: any): NovaLocacaoStageDef {
@@ -72,8 +74,9 @@ export function getDisplayStatus(ticket: any): DisplayStatus {
       : { label: 'Em Validação Contrato', colorClass: 'bg-amber-100 text-amber-700' }
   }
 
-  if (ticket.category === 'Solicitação de Reembolso' && ticket.status === 'aberto') {
-    return { label: 'Aguardando entrada NF', colorClass: 'bg-amber-100 text-amber-700' }
+  if (ticket.category === 'Solicitação de Reembolso') {
+    if (ticket.status === 'aberto') return { label: 'Aguardando entrada NF', colorClass: 'bg-amber-100 text-amber-700' }
+    if (ticket.status === 'em_andamento') return { label: 'NF Registrada – Em Processamento', colorClass: 'bg-indigo-100 text-indigo-700' }
   }
 
   if (ticket.status === 'em_andamento') {
@@ -98,7 +101,7 @@ export function getResponsibleSector(ticket: any): string | null {
   }
 
   if (ticket.category === 'Solicitação de Reembolso') {
-    return ticket.status === 'aberto' ? 'Financeiro' : null
+    return (ticket.status === 'aberto' || ticket.status === 'em_andamento') ? 'Financeiro' : null
   }
 
   return SECTOR_BY_CATEGORY[ticket.category] ?? null

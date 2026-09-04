@@ -114,6 +114,98 @@ function Fase2Form({ onAvancar, submitting, setSubmitting }: CommonProps) {
       </div>
       <div className="flex justify-end">
         <Button onClick={handleSubmit} disabled={submitting} className="bg-amber-600 hover:bg-amber-700 text-white gap-2 font-bold">
+          <ArrowRightCircle size={16} /> Avançar para Análise de Crédito
+        </Button>
+      </div>
+    </StageCard>
+  )
+}
+
+// Etapa 1 do Estágio 3 — responsabilidade do Financeiro: analisa o crédito do
+// cliente e faz o cadastro sistêmico antes de Contratos elaborar o contrato.
+function Fase3Form({ ticket, uploadFile, onAvancar, submitting, setSubmitting }: CommonProps & { ticket: any; uploadFile: Props['uploadFile'] }) {
+  const credito = ticket.custom_data?.estagio_3_credito || {}
+  const [resultado, setResultado] = useState(credito.resultado || "")
+  const [codigoCliente, setCodigoCliente] = useState(credito.codigo_cliente || "")
+  const [parecer, setParecer] = useState(credito.parecer || "")
+  const [arquivoParecer, setArquivoParecer] = useState<File | null>(null)
+
+  const handleSubmit = async () => {
+    if (!resultado) return alert("Selecione o resultado da análise de crédito.")
+    if (!codigoCliente.trim()) return alert("Informe o código do cliente no sistema (cadastro sistêmico).")
+    if (!parecer.trim()) return alert("Descreva o parecer da análise de crédito e cadastro.")
+
+    setSubmitting(true)
+    try {
+      const anexos: Anexo[] = []
+      let parecerArquivo: { nome: string; url: string } | undefined
+      if (arquivoParecer) {
+        parecerArquivo = await uploadFile(arquivoParecer)
+        anexos.push({ ...parecerArquivo, campo: 'parecer_credito' })
+      }
+
+      await onAvancar(
+        {
+          resultado,
+          codigo_cliente: codigoCliente,
+          parecer,
+          ...(parecerArquivo ? { parecer_credito: parecerArquivo } : {}),
+        },
+        'estagio_3_credito',
+        anexos
+      )
+    } catch (err: any) {
+      alert(err.message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <StageCard
+      title="Estágio 3 — Análise de Crédito e Cadastro Sistêmico"
+      subtitle="Etapa do Financeiro: aprove o crédito do cliente e registre o cadastro no sistema."
+    >
+      <div className="grid gap-3 md:grid-cols-2">
+        <div>
+          <Label className="font-bold">Resultado da Análise *</Label>
+          <Select value={resultado} onValueChange={setResultado}>
+            <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Aprovado">Aprovado</SelectItem>
+              <SelectItem value="Aprovado com ressalvas">Aprovado com ressalvas</SelectItem>
+              <SelectItem value="Reprovado">Reprovado</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className="font-bold">Código do Cliente no Sistema *</Label>
+          <Input value={codigoCliente} onChange={e => setCodigoCliente(e.target.value)} placeholder="Cadastro sistêmico" />
+        </div>
+        <div className="md:col-span-2">
+          <Label className="font-bold">Parecer / Observações *</Label>
+          <Textarea
+            value={parecer}
+            onChange={e => setParecer(e.target.value)}
+            placeholder="Descreva o resultado da análise de crédito e do cadastro do cliente"
+            rows={4}
+          />
+        </div>
+        <div className="md:col-span-2">
+          <Label className="font-bold">Anexo do Parecer (opcional)</Label>
+          <Input type="file" className="cursor-pointer" onChange={e => setArquivoParecer(e.target.files?.[0] || null)} />
+          {arquivoParecer && <span className="text-xs text-green-600 mt-1 block">✓ {arquivoParecer.name}</span>}
+        </div>
+      </div>
+
+      {resultado === 'Reprovado' && (
+        <div className="bg-red-50 border border-red-200 rounded p-3 text-xs text-red-700 font-semibold">
+          Crédito reprovado: registre o motivo no parecer. Se a locação não deve seguir, use &quot;Devolver Tudo&quot; para retornar o chamado ao Comercial.
+        </div>
+      )}
+
+      <div className="flex justify-end">
+        <Button onClick={handleSubmit} disabled={submitting} className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 font-bold">
           <ArrowRightCircle size={16} /> Avançar para Contratos
         </Button>
       </div>
@@ -121,38 +213,47 @@ function Fase2Form({ onAvancar, submitting, setSubmitting }: CommonProps) {
   )
 }
 
-function Fase3Form({ ticket, onAvancar, submitting, setSubmitting }: CommonProps & { ticket: any }) {
+function Fase4Form({ ticket, onAvancar, submitting, setSubmitting }: CommonProps & { ticket: any }) {
   const estagio3 = ticket.custom_data?.estagio_3 || {}
+  const credito = ticket.custom_data?.estagio_3_credito || {}
   const [dataInicio, setDataInicio] = useState(estagio3.data_inicio_locacao || "")
-  const [avaliacaoRisco, setAvaliacaoRisco] = useState(estagio3.avaliacao_risco || "")
 
   const handleSubmit = async () => {
     if (!dataInicio) return alert("Informe a data de início da locação.")
-    if (!avaliacaoRisco.trim()) return alert("Informe a avaliação de risco / análise de crédito e cadastro.")
 
     setSubmitting(true)
     try {
-      await onAvancar({ data_inicio_locacao: dataInicio, avaliacao_risco: avaliacaoRisco }, 'estagio_3')
+      await onAvancar({ data_inicio_locacao: dataInicio }, 'estagio_3')
     } finally {
       setSubmitting(false)
     }
   }
 
   return (
-    <StageCard title="Estágio 3 — Contratos: Em Elaboração" subtitle="Inclui a análise de crédito e cadastro do cliente.">
+    <StageCard title="Estágio 3 — Contratos: Em Elaboração" subtitle="Crédito já analisado pelo Financeiro. Informe a data de início da locação.">
+      {(credito.resultado || credito.codigo_cliente) && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded p-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <span className="block text-[10px] font-bold text-emerald-600 uppercase">Análise de Crédito</span>
+            <span className="font-medium text-sm">{credito.resultado || '-'}</span>
+          </div>
+          <div>
+            <span className="block text-[10px] font-bold text-emerald-600 uppercase">Código do Cliente</span>
+            <span className="font-medium text-sm">{credito.codigo_cliente || '-'}</span>
+          </div>
+          {credito.parecer && (
+            <div className="md:col-span-2">
+              <span className="block text-[10px] font-bold text-emerald-600 uppercase">Parecer</span>
+              <span className="text-sm text-gray-700 whitespace-pre-wrap">{credito.parecer}</span>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="grid gap-3 md:grid-cols-2">
         <div>
           <Label className="font-bold">Data de Início da Locação *</Label>
           <Input type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)} />
-        </div>
-        <div className="md:col-span-2">
-          <Label className="font-bold">Avaliação de Risco / Análise de Crédito e Cadastro *</Label>
-          <Textarea
-            value={avaliacaoRisco}
-            onChange={e => setAvaliacaoRisco(e.target.value)}
-            placeholder="Descreva o resultado da análise de crédito e cadastro do cliente"
-            rows={4}
-          />
         </div>
       </div>
       <div className="flex justify-end">
@@ -164,7 +265,7 @@ function Fase3Form({ ticket, onAvancar, submitting, setSubmitting }: CommonProps
   )
 }
 
-function Fase4Form({ ticket, onAvancar, submitting, setSubmitting }: CommonProps & { ticket: any }) {
+function Fase5Form({ ticket, onAvancar, submitting, setSubmitting }: CommonProps & { ticket: any }) {
   const handleClick = async () => {
     setSubmitting(true)
     try {
@@ -188,7 +289,7 @@ function Fase4Form({ ticket, onAvancar, submitting, setSubmitting }: CommonProps
   )
 }
 
-function Fase5Form({ ticket, onAvancar, submitting, setSubmitting }: CommonProps & { ticket: any }) {
+function Fase6Form({ ticket, onAvancar, submitting, setSubmitting }: CommonProps & { ticket: any }) {
   const handleClick = async () => {
     setSubmitting(true)
     try {
@@ -212,7 +313,7 @@ function Fase5Form({ ticket, onAvancar, submitting, setSubmitting }: CommonProps
   )
 }
 
-function Fase6Form({ uploadFile, onAvancar, submitting, setSubmitting }: CommonProps & { uploadFile: Props['uploadFile'] }) {
+function Fase7Form({ uploadFile, onAvancar, submitting, setSubmitting }: CommonProps & { uploadFile: Props['uploadFile'] }) {
   const [arquivoOv, setArquivoOv] = useState<File | null>(null)
   const [valorFrete, setValorFrete] = useState("")
   const [tipoFrete, setTipoFrete] = useState("")
@@ -229,7 +330,7 @@ function Fase6Form({ uploadFile, onAvancar, submitting, setSubmitting }: CommonP
         { upload_ov: upload, valor_frete: valorFrete, tipo_frete: tipoFrete },
         'estagio_4',
         [{ ...upload, campo: 'upload_ov' }],
-        9
+        10
       )
     } catch (err: any) {
       alert(err.message)
@@ -270,7 +371,7 @@ function Fase6Form({ uploadFile, onAvancar, submitting, setSubmitting }: CommonP
   )
 }
 
-function Fase7Form({ ticket, onAvancar, submitting, setSubmitting }: CommonProps & { ticket: any }) {
+function Fase8Form({ ticket, onAvancar, submitting, setSubmitting }: CommonProps & { ticket: any }) {
   const handleClick = async () => {
     setSubmitting(true)
     try {
@@ -294,7 +395,7 @@ function Fase7Form({ ticket, onAvancar, submitting, setSubmitting }: CommonProps
   )
 }
 
-function Fase8Form({ ticket, onAvancar, submitting, setSubmitting }: CommonProps & { ticket: any }) {
+function Fase9Form({ ticket, onAvancar, submitting, setSubmitting }: CommonProps & { ticket: any }) {
   const handleClick = async () => {
     setSubmitting(true)
     try {
@@ -302,7 +403,7 @@ function Fase8Form({ ticket, onAvancar, submitting, setSubmitting }: CommonProps
         { ...(ticket.custom_data?.estagio_4 || {}), data_inicio_periodo_locacao: new Date().toISOString() },
         'estagio_4',
         undefined,
-        10
+        11
       )
     } finally {
       setSubmitting(false)
@@ -323,7 +424,7 @@ function Fase8Form({ ticket, onAvancar, submitting, setSubmitting }: CommonProps
   )
 }
 
-function Fase9Form({ ticket, uploadFile, onAvancar, submitting, setSubmitting }: CommonProps & { ticket: any; uploadFile: Props['uploadFile'] }) {
+function Fase10Form({ ticket, uploadFile, onAvancar, submitting, setSubmitting }: CommonProps & { ticket: any; uploadFile: Props['uploadFile'] }) {
   const estagio5 = ticket.custom_data?.estagio_5 || {}
   const estagio4 = ticket.custom_data?.estagio_4 || {}
   const [numeroContrato, setNumeroContrato] = useState(estagio5.numero_contrato || "")
@@ -356,7 +457,7 @@ function Fase9Form({ ticket, uploadFile, onAvancar, submitting, setSubmitting }:
         data_inicio_cobranca: dataInicioCobranca,
         valor_frete_ref: estagio4.valor_frete,
         tipo_frete_ref: estagio4.tipo_frete,
-      }, 'estagio_5', anexos, 7)
+      }, 'estagio_5', anexos, 8)
     } catch (err: any) {
       alert(err.message)
     } finally {
@@ -416,7 +517,7 @@ function Fase9Form({ ticket, uploadFile, onAvancar, submitting, setSubmitting }:
   )
 }
 
-function Fase10Form({ uploadFile, onAvancar, submitting, setSubmitting }: CommonProps & { uploadFile: Props['uploadFile'] }) {
+function Fase11Form({ uploadFile, onAvancar, submitting, setSubmitting }: CommonProps & { uploadFile: Props['uploadFile'] }) {
   const [numeroFatura, setNumeroFatura] = useState("")
   const [arquivoFatura, setArquivoFatura] = useState<File | null>(null)
   const [numeroNd, setNumeroNd] = useState("")
@@ -504,14 +605,15 @@ export default function NovaLocacaoStageForm({ ticket, uploadFile, podeAgir, onA
   switch (faseAtual) {
     case 1: return <Fase1Form {...common} />
     case 2: return <Fase2Form {...common} />
-    case 3: return <Fase3Form {...common} ticket={ticket} />
+    case 3: return <Fase3Form {...common} ticket={ticket} uploadFile={uploadFile} />
     case 4: return <Fase4Form {...common} ticket={ticket} />
     case 5: return <Fase5Form {...common} ticket={ticket} />
-    case 6: return <Fase6Form {...common} uploadFile={uploadFile} />
-    case 7: return <Fase7Form {...common} ticket={ticket} />
+    case 6: return <Fase6Form {...common} ticket={ticket} />
+    case 7: return <Fase7Form {...common} uploadFile={uploadFile} />
     case 8: return <Fase8Form {...common} ticket={ticket} />
-    case 9: return <Fase9Form {...common} ticket={ticket} uploadFile={uploadFile} />
-    case 10: return <Fase10Form {...common} uploadFile={uploadFile} />
+    case 9: return <Fase9Form {...common} ticket={ticket} />
+    case 10: return <Fase10Form {...common} ticket={ticket} uploadFile={uploadFile} />
+    case 11: return <Fase11Form {...common} uploadFile={uploadFile} />
     default: return null
   }
 }

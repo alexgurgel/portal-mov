@@ -5,6 +5,7 @@ import { CheckCircle2, Paperclip, User, Clock } from "lucide-react"
 const formatKey = (key: string) => key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
 
 const CAMPO_LABELS: Record<string, string> = {
+  parecer_credito: "Parecer da Análise de Crédito",
   upload_ov: "OV (Ordem de Venda)",
   print_contrato: "Print do Contrato",
   fatura_locacao: "Fatura de Locação",
