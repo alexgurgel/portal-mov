@@ -3,12 +3,25 @@
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import { getDisplayStatus, getResponsibleSector } from "@/lib/ticketPhases"
-import { ListChecks, Inbox } from "lucide-react"
+import { matchesTicketSearch, PRIORIDADES } from "@/lib/ticketSearch"
+import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { ListChecks, Inbox, Search, X } from "lucide-react"
 
 export default function PendentesClient() {
   const [loading, setLoading] = useState(true)
   const [setor, setSetor] = useState<string | null>(null)
   const [tickets, setTickets] = useState<any[]>([])
+  const [searchTerm, setSearchTerm] = useState("")
+  const [categoriaFiltro, setCategoriaFiltro] = useState("todas")
+  const [prioridadeFiltro, setPrioridadeFiltro] = useState("todas")
 
   useEffect(() => {
     async function init() {
@@ -63,6 +76,25 @@ export default function PendentesClient() {
     return (priority === 'alta' || priority === 'critica') ? 'text-red-600' : 'text-blue-600'
   }
 
+  // Tipos de solicitação que realmente aparecem na fila do setor.
+  const categoriasDisponiveis = Array.from(
+    new Set(tickets.map((t) => t.category).filter(Boolean))
+  ).sort()
+
+  const ticketsFiltrados = tickets.filter((ticket) => {
+    if (categoriaFiltro !== "todas" && ticket.category !== categoriaFiltro) return false
+    if (prioridadeFiltro !== "todas" && ticket.priority !== prioridadeFiltro) return false
+    return matchesTicketSearch(ticket, searchTerm)
+  })
+
+  const temFiltroAtivo = searchTerm !== "" || categoriaFiltro !== "todas" || prioridadeFiltro !== "todas"
+
+  const limparFiltros = () => {
+    setSearchTerm("")
+    setCategoriaFiltro("todas")
+    setPrioridadeFiltro("todas")
+  }
+
   if (loading) {
     return <div className="p-10 text-center text-gray-400 text-sm">Carregando...</div>
   }
@@ -90,6 +122,63 @@ export default function PendentesClient() {
         </p>
       </div>
 
+      {/* BARRA DE FILTROS */}
+      <div className="bg-white p-4 rounded-lg shadow border grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+        <div className="md:col-span-6">
+          <label className="text-xs font-bold text-gray-500 mb-1 block">Pesquisar</label>
+          <div className="relative">
+            <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
+            <Input
+              placeholder="Solicitante, assunto, descrição, nº do chamado, cliente, NF..."
+              className="pl-8 bg-gray-50"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="md:col-span-3">
+          <label className="text-xs font-bold text-gray-500 mb-1 block">Tipo de Solicitação</label>
+          <Select onValueChange={setCategoriaFiltro} value={categoriaFiltro}>
+            <SelectTrigger className="bg-gray-50">
+              <SelectValue placeholder="Todos os tipos" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todas">Todos os tipos</SelectItem>
+              {categoriasDisponiveis.map((categoria) => (
+                <SelectItem key={categoria} value={categoria}>{categoria}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="md:col-span-3">
+          <label className="text-xs font-bold text-gray-500 mb-1 block">Prioridade</label>
+          <Select onValueChange={setPrioridadeFiltro} value={prioridadeFiltro}>
+            <SelectTrigger className="bg-gray-50">
+              <SelectValue placeholder="Todas" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todas">Todas</SelectItem>
+              {PRIORIDADES.map((p) => (
+                <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="md:col-span-12 flex items-center justify-between gap-2">
+          <span className="text-xs text-gray-500 font-medium">
+            {ticketsFiltrados.length} {ticketsFiltrados.length === 1 ? 'chamado encontrado' : 'chamados encontrados'}
+          </span>
+          {temFiltroAtivo && (
+            <Button variant="ghost" size="sm" onClick={limparFiltros} className="text-red-500 hover:text-red-700 hover:bg-red-50">
+              <X className="w-4 h-4 mr-1" /> Limpar Filtros
+            </Button>
+          )}
+        </div>
+      </div>
+
       <div className="bg-white rounded-lg shadow border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left table-fixed">
@@ -105,14 +194,16 @@ export default function PendentesClient() {
               </tr>
             </thead>
             <tbody>
-              {tickets.length === 0 ? (
+              {ticketsFiltrados.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-10 text-center text-gray-500">
-                    Nenhum chamado pendente para o seu setor no momento.
+                    {temFiltroAtivo
+                      ? 'Nenhum chamado encontrado com esses filtros.'
+                      : 'Nenhum chamado pendente para o seu setor no momento.'}
                   </td>
                 </tr>
               ) : (
-                tickets.map((ticket) => (
+                ticketsFiltrados.map((ticket) => (
                   <tr
                     key={ticket.id}
                     className="bg-white border-b hover:bg-gray-50 cursor-pointer transition-colors"

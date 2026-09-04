@@ -16,14 +16,33 @@ import {
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
+import { matchesTicketSearch } from "@/lib/ticketSearch"
+
+// Ações possíveis no relatório (usadas no cadastro e no filtro).
+const ACOES_RELATORIO = [
+  "Prox. Preventiva",
+  "Corretiva Imediata",
+  "Em andamento",
+  "Mau uso",
+  "A Faturar",
+]
+
+const STATUS_RELATORIO = [
+  { value: "aberto", label: "Pendente" },
+  { value: "andamento", label: "Em Andamento" },
+  { value: "devolvida", label: "Devolvida" },
+  { value: "resolvido", label: "Concluído" },
+]
 
 export default function ControleRelatorio() {
   const [registros, setRegistros] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  
+
   // ESTADOS DE FILTRO E PESQUISA
   const [busca, setBusca] = useState("")
   const [mostrarConcluidos, setMostrarConcluidos] = useState(false)
+  const [acaoFiltro, setAcaoFiltro] = useState("todas")
+  const [statusFiltro, setStatusFiltro] = useState("todos")
 
   // Controle das Modais
   const [openNew, setOpenNew] = useState(false)
@@ -190,17 +209,21 @@ export default function ControleRelatorio() {
   }
 
   // --- LÓGICA DE FILTRAGEM ---
+  // A pesquisa cobre PAT, empresa, assunto, descrição, nº do relatório, ação,
+  // solicitante, nº do registro e o nome do arquivo anexado.
   const registrosFiltrados = registros.filter((item) => {
-    const termo = busca.toLowerCase()
-    const matchPat = item.custom_data?.pat?.toLowerCase().includes(termo) || false
-    const matchEmpresa = item.custom_data?.empresa?.toLowerCase().includes(termo) || false
-    const matchBusca = termo === "" || matchPat || matchEmpresa
+    const matchBusca = matchesTicketSearch(item, busca)
 
     const isConcluido = item.status === 'resolvido' || item.status === 'concluido'
-    
-    // Se o botão "Mostrar Histórico" estiver DESLIGADO (false), escondemos os concluídos
-    if (!mostrarConcluidos && isConcluido) return false
-    
+
+    // Se o botão "Mostrar Histórico" estiver DESLIGADO (false), escondemos os
+    // concluídos — a menos que o filtro de status peça justamente por eles.
+    if (!mostrarConcluidos && isConcluido && statusFiltro !== 'resolvido') return false
+
+    if (acaoFiltro !== "todas" && item.custom_data?.acao !== acaoFiltro) return false
+
+    if (statusFiltro !== "todos" && item.status !== statusFiltro) return false
+
     return matchBusca
   })
 
@@ -261,11 +284,9 @@ export default function ControleRelatorio() {
                         <Select onValueChange={setAcao}>
                             <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="Prox. Preventiva">Prox. Preventiva</SelectItem>
-                                <SelectItem value="Corretiva Imediata">Corretiva Imediata</SelectItem>
-                                <SelectItem value="Em andamento">Em andamento</SelectItem>
-                                <SelectItem value="Mau uso">Mau uso</SelectItem> {/* Opção separada 1 */}
-                                <SelectItem value="A Faturar">A Faturar</SelectItem> {/* Opção separada 2 */}
+                                {ACOES_RELATORIO.map((acaoItem) => (
+                                    <SelectItem key={acaoItem} value={acaoItem}>{acaoItem}</SelectItem>
+                                ))}
                             </SelectContent>
                         </Select>
                     </div>
@@ -286,29 +307,74 @@ export default function ControleRelatorio() {
       </div>
 
       {/* --- BARRA DE PESQUISA E FILTRO --- */}
-      <div className="bg-white p-4 rounded-lg shadow-sm border flex flex-col md:flex-row gap-4 items-center justify-between">
-         <div className="relative w-full md:w-1/2">
-             <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-             <Input 
-                placeholder="Pesquisar por PAT ou Empresa..." 
-                className="pl-10"
-                value={busca}
-                onChange={(e) => setBusca(e.target.value)}
-             />
+      <div className="bg-white p-4 rounded-lg shadow-sm border space-y-3">
+         <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-end">
+             <div className="flex-1">
+                 <label className="text-xs font-bold text-gray-500 mb-1 block">Pesquisar</label>
+                 <div className="relative">
+                     <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                     <Input
+                        placeholder="PAT, empresa, assunto, descrição, nº do relatório, solicitante..."
+                        className="pl-10"
+                        value={busca}
+                        onChange={(e) => setBusca(e.target.value)}
+                     />
+                 </div>
+             </div>
+
+             <div className="w-full md:w-52">
+                 <label className="text-xs font-bold text-gray-500 mb-1 block">Ação</label>
+                 <Select onValueChange={setAcaoFiltro} value={acaoFiltro}>
+                     <SelectTrigger className="bg-gray-50"><SelectValue placeholder="Todas" /></SelectTrigger>
+                     <SelectContent>
+                         <SelectItem value="todas">Todas as ações</SelectItem>
+                         {ACOES_RELATORIO.map((acaoItem) => (
+                             <SelectItem key={acaoItem} value={acaoItem}>{acaoItem}</SelectItem>
+                         ))}
+                     </SelectContent>
+                 </Select>
+             </div>
+
+             <div className="w-full md:w-44">
+                 <label className="text-xs font-bold text-gray-500 mb-1 block">Status</label>
+                 <Select onValueChange={setStatusFiltro} value={statusFiltro}>
+                     <SelectTrigger className="bg-gray-50"><SelectValue placeholder="Todos" /></SelectTrigger>
+                     <SelectContent>
+                         <SelectItem value="todos">Todos</SelectItem>
+                         {STATUS_RELATORIO.map((st) => (
+                             <SelectItem key={st.value} value={st.value}>{st.label}</SelectItem>
+                         ))}
+                     </SelectContent>
+                 </Select>
+             </div>
          </div>
-         
-         <div className="flex items-center gap-2">
-            <button 
-                onClick={() => setMostrarConcluidos(!mostrarConcluidos)}
-                className={`flex items-center gap-2 px-4 py-2 rounded text-sm font-medium transition-colors border ${
-                    mostrarConcluidos 
-                    ? "bg-blue-50 border-blue-200 text-blue-700" 
-                    : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
-                }`}
-            >
-                <Filter className="w-4 h-4" />
-                {mostrarConcluidos ? "Ocultar Concluídos" : "Mostrar Histórico (Concluídos)"}
-            </button>
+
+         <div className="flex flex-col md:flex-row gap-2 items-center justify-between">
+            <span className="text-xs text-gray-500 font-medium">
+                {registrosFiltrados.length} {registrosFiltrados.length === 1 ? 'registro encontrado' : 'registros encontrados'}
+            </span>
+
+            <div className="flex items-center gap-2">
+                {(busca || acaoFiltro !== 'todas' || statusFiltro !== 'todos') && (
+                    <button
+                        onClick={() => { setBusca(""); setAcaoFiltro("todas"); setStatusFiltro("todos") }}
+                        className="px-3 py-2 rounded text-sm font-medium text-red-500 hover:bg-red-50 transition-colors"
+                    >
+                        Limpar Filtros
+                    </button>
+                )}
+                <button
+                    onClick={() => setMostrarConcluidos(!mostrarConcluidos)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded text-sm font-medium transition-colors border ${
+                        mostrarConcluidos
+                        ? "bg-blue-50 border-blue-200 text-blue-700"
+                        : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
+                    }`}
+                >
+                    <Filter className="w-4 h-4" />
+                    {mostrarConcluidos ? "Ocultar Concluídos" : "Mostrar Histórico (Concluídos)"}
+                </button>
+            </div>
          </div>
       </div>
 

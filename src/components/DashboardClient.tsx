@@ -7,7 +7,7 @@ import { NewTicket } from "@/components/NewTicket"
 import { ExportTickets } from "@/components/ExportTickets"
 import { Input } from "@/components/ui/input" // Importando Input
 import { Button } from "@/components/ui/button" // Importando Button
-import { Search, X, Calendar } from "lucide-react" // Ícones
+import { Search, X } from "lucide-react" // Ícones
 import {
   Select,
   SelectContent,
@@ -16,30 +16,42 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { getDisplayStatus } from "@/lib/ticketPhases"
+import { buildTicketOrFilter, TICKET_CATEGORIES, TIPOS_DOCUMENTO, PRIORIDADES } from "@/lib/ticketSearch"
 
 function DashboardContent() {
   const [tickets, setTickets] = useState<any[]>([])
   const [statusFilter, setStatusFilter] = useState("todos")
-  
+
   // NOVOS ESTADOS PARA OS FILTROS
-  const [searchTerm, setSearchTerm] = useState("") // Pesquisa por nome
+  const [searchTerm, setSearchTerm] = useState("") // Pesquisa livre (solicitante, assunto, descrição, nº, cliente, NF...)
   const [startDate, setStartDate] = useState("")   // Data Inicio
   const [endDate, setEndDate] = useState("")       // Data Fim
+  const [categoryFilter, setCategoryFilter] = useState("todas") // Tipo de Solicitação
+  const [tipoDocumento, setTipoDocumento] = useState("todos")   // Tipo de Documento (Emissão de Documento)
+  const [priorityFilter, setPriorityFilter] = useState("todas") // Prioridade
 
   const searchParams = useSearchParams()
   const setorFiltrado = searchParams.get('sector')
 
+  // Dentro de um setor a categoria vem da URL; na Visão Geral vem do seletor.
+  const categoriaAtiva = setorFiltrado || (categoryFilter !== "todas" ? categoryFilter : null)
+  const mostrarTipoDocumento = categoriaAtiva === "Emissão de Documento"
+
   useEffect(() => {
-    const fetchTickets = async () => {
+    // A pesquisa livre também varre campos do formulário (cliente, NF, PAT...).
+    // Se o banco recusar esse formato, refazemos a consulta só com as colunas.
+    const montarQuery = (comCustomData: boolean) => {
       let query = supabase
         .from('tickets')
         .select('*')
-        .neq('category', 'Controle de Relatorio') 
+        .neq('category', 'Controle de Relatorio')
         .order('created_at', { ascending: false })
 
-      // 1. Filtro de Setor (URL)
+      // 1. Filtro de Setor (URL) ou Tipo de Solicitação (seletor)
       if (setorFiltrado) {
         query = query.eq('category', setorFiltrado)
+      } else if (categoryFilter !== "todas") {
+        query = query.eq('category', categoryFilter)
       }
 
       // 2. Filtro de Status
@@ -47,24 +59,42 @@ function DashboardContent() {
         query = query.eq('status', statusFilter)
       }
 
-      // 3. Filtro de Pesquisa (Nome do Solicitante)
-      if (searchTerm) {
-        // ilike faz busca que ignora maiúsculas/minúsculas
-        query = query.ilike('requester_name', `%${searchTerm}%`)
+      // 3. Filtro de Prioridade
+      if (priorityFilter !== "todas") {
+        query = query.eq('priority', priorityFilter)
       }
 
-      // 4. Filtro de Data (Inicio)
+      // 4. Pesquisa livre (nº do chamado, solicitante, assunto, descrição, categoria...)
+      const filtroBusca = buildTicketOrFilter(searchTerm, comCustomData)
+      if (filtroBusca) {
+        query = query.or(filtroBusca)
+      }
+
+      // 5. Filtro de Data (Inicio)
       if (startDate) {
         query = query.gte('created_at', `${startDate}T00:00:00`)
       }
 
-      // 5. Filtro de Data (Fim)
+      // 6. Filtro de Data (Fim)
       if (endDate) {
         query = query.lte('created_at', `${endDate}T23:59:59`)
       }
-      
-      const { data } = await query
-      if (data) setTickets(data)
+
+      return query
+    }
+
+    const fetchTickets = async () => {
+      let { data, error } = await montarQuery(true)
+
+      if (error) {
+        console.warn('Pesquisa ampliada indisponível, refazendo apenas com as colunas principais:', error.message)
+        const retry = await montarQuery(false)
+        data = retry.data
+        error = retry.error
+      }
+
+      if (error) console.error('Erro ao buscar chamados:', error.message)
+      setTickets(data || [])
     }
 
     // Adicionamos um pequeno delay (debounce) na pesquisa para não travar enquanto digita
@@ -74,13 +104,31 @@ function DashboardContent() {
 
     return () => clearTimeout(delayDebounce)
 
-  }, [setorFiltrado, statusFilter, searchTerm, startDate, endDate]) 
+  }, [setorFiltrado, statusFilter, searchTerm, startDate, endDate, categoryFilter, priorityFilter])
+
+  // O tipo de documento fica dentro do custom_data, então é aplicado no resultado.
+  const ticketsFiltrados = mostrarTipoDocumento && tipoDocumento !== "todos"
+    ? tickets.filter((t) => t.custom_data?.tipo_emissao === tipoDocumento)
+    : tickets
+
+  // Só conta o que está realmente visível/aplicado na tela atual.
+  const temFiltroAtivo =
+    searchTerm !== "" ||
+    startDate !== "" ||
+    endDate !== "" ||
+    statusFilter !== "todos" ||
+    priorityFilter !== "todas" ||
+    (!setorFiltrado && categoryFilter !== "todas") ||
+    (mostrarTipoDocumento && tipoDocumento !== "todos")
 
   const limparFiltros = () => {
       setSearchTerm("")
       setStartDate("")
       setEndDate("")
       setStatusFilter("todos")
+      setCategoryFilter("todas")
+      setPriorityFilter("todas")
+      setTipoDocumento("todos")
   }
 
   const getPriorityColor = (priority: string) => {
@@ -101,7 +149,7 @@ function DashboardContent() {
             </p>
         </div>
         <div className="flex gap-2">
-            <ExportTickets data={tickets} />
+            <ExportTickets data={ticketsFiltrados} />
             <NewTicket />
         </div>
       </div>
@@ -109,41 +157,37 @@ function DashboardContent() {
       {/* BARRA DE FILTROS */}
       <div className="bg-white p-4 rounded-lg shadow border grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
           
-          {/* Pesquisa por Nome */}
-          <div className="md:col-span-4">
-              <label className="text-xs font-bold text-gray-500 mb-1 block">Pesquisar Solicitante</label>
+          {/* Pesquisa Livre */}
+          <div className={setorFiltrado ? "md:col-span-8" : "md:col-span-5"}>
+              <label className="text-xs font-bold text-gray-500 mb-1 block">Pesquisar</label>
               <div className="relative">
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
-                  <Input 
-                    placeholder="Nome do solicitante..." 
-                    className="pl-8 bg-gray-50" 
+                  <Input
+                    placeholder="Solicitante, assunto, descrição, nº do chamado, cliente, NF..."
+                    className="pl-8 bg-gray-50"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
               </div>
           </div>
 
-          {/* Data Inicial */}
-          <div className="md:col-span-2">
-              <label className="text-xs font-bold text-gray-500 mb-1 block">Data Inicial</label>
-              <Input 
-                type="date" 
-                className="bg-gray-50 text-xs" 
-                value={startDate} 
-                onChange={(e) => setStartDate(e.target.value)}
-              />
-          </div>
-
-          {/* Data Final */}
-          <div className="md:col-span-2">
-              <label className="text-xs font-bold text-gray-500 mb-1 block">Data Final</label>
-              <Input 
-                type="date" 
-                className="bg-gray-50 text-xs"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
-          </div>
+          {/* Tipo de Solicitação (na Visão Geral; dentro do setor vem da URL) */}
+          {!setorFiltrado && (
+            <div className="md:col-span-3">
+                <label className="text-xs font-bold text-gray-500 mb-1 block">Tipo de Solicitação</label>
+                <Select onValueChange={setCategoryFilter} value={categoryFilter}>
+                      <SelectTrigger className="bg-gray-50">
+                          <SelectValue placeholder="Todos os tipos" />
+                      </SelectTrigger>
+                      <SelectContent>
+                          <SelectItem value="todas">Todos os tipos</SelectItem>
+                          {TICKET_CATEGORIES.map((categoria) => (
+                              <SelectItem key={categoria} value={categoria}>{categoria}</SelectItem>
+                          ))}
+                      </SelectContent>
+                  </Select>
+            </div>
+          )}
 
           {/* Status */}
           <div className="md:col-span-2">
@@ -162,10 +206,69 @@ function DashboardContent() {
                 </Select>
           </div>
 
-          {/* Botão Limpar */}
-          <div className="md:col-span-2 flex justify-end">
-              {(searchTerm || startDate || endDate || statusFilter !== 'todos') && (
-                  <Button variant="ghost" size="sm" onClick={limparFiltros} className="text-red-500 hover:text-red-700 hover:bg-red-50 w-full md:w-auto">
+          {/* Prioridade */}
+          <div className="md:col-span-2">
+              <label className="text-xs font-bold text-gray-500 mb-1 block">Prioridade</label>
+              <Select onValueChange={setPriorityFilter} value={priorityFilter}>
+                    <SelectTrigger className="bg-gray-50">
+                        <SelectValue placeholder="Todas" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="todas">Todas</SelectItem>
+                        {PRIORIDADES.map((p) => (
+                            <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+          </div>
+
+          {/* Tipo de Documento (só aparece em Emissão de Documento) */}
+          {mostrarTipoDocumento && (
+            <div className="md:col-span-3">
+                <label className="text-xs font-bold text-gray-500 mb-1 block">Tipo de Documento</label>
+                <Select onValueChange={setTipoDocumento} value={tipoDocumento}>
+                      <SelectTrigger className="bg-gray-50">
+                          <SelectValue placeholder="Todos" />
+                      </SelectTrigger>
+                      <SelectContent>
+                          <SelectItem value="todos">Todos</SelectItem>
+                          {TIPOS_DOCUMENTO.map((tipo) => (
+                              <SelectItem key={tipo} value={tipo}>{tipo}</SelectItem>
+                          ))}
+                      </SelectContent>
+                  </Select>
+            </div>
+          )}
+
+          {/* Data Inicial */}
+          <div className="md:col-span-2">
+              <label className="text-xs font-bold text-gray-500 mb-1 block">Data Inicial</label>
+              <Input
+                type="date"
+                className="bg-gray-50 text-xs"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
+          </div>
+
+          {/* Data Final */}
+          <div className="md:col-span-2">
+              <label className="text-xs font-bold text-gray-500 mb-1 block">Data Final</label>
+              <Input
+                type="date"
+                className="bg-gray-50 text-xs"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+          </div>
+
+          {/* Contador de resultados + Botão Limpar */}
+          <div className={`${mostrarTipoDocumento ? 'md:col-span-5' : 'md:col-span-8'} flex items-center justify-between gap-2`}>
+              <span className="text-xs text-gray-500 font-medium">
+                  {ticketsFiltrados.length} {ticketsFiltrados.length === 1 ? 'chamado encontrado' : 'chamados encontrados'}
+              </span>
+              {temFiltroAtivo && (
+                  <Button variant="ghost" size="sm" onClick={limparFiltros} className="text-red-500 hover:text-red-700 hover:bg-red-50">
                       <X className="w-4 h-4 mr-1"/> Limpar Filtros
                   </Button>
               )}
@@ -188,14 +291,14 @@ function DashboardContent() {
                     </tr>
                 </thead>
                 <tbody>
-                    {tickets.length === 0 ? (
+                    {ticketsFiltrados.length === 0 ? (
                         <tr>
                             <td colSpan={7} className="px-6 py-10 text-center text-gray-500">
                                 Nenhuma solicitação encontrada com esses filtros.
                             </td>
                         </tr>
                     ) : (
-                        tickets.map((ticket) => (
+                        ticketsFiltrados.map((ticket) => (
                             <tr 
                                 key={ticket.id} 
                                 className="bg-white border-b hover:bg-gray-50 cursor-pointer transition-colors"

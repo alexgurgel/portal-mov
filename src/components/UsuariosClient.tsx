@@ -37,6 +37,8 @@ export default function UsuariosClient() {
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
   const [searchTerm, setSearchTerm] = useState("")
+  const [departmentFilter, setDepartmentFilter] = useState("todos")
+  const [roleFilter, setRoleFilter] = useState("todas")
 
   useEffect(() => {
     async function init() {
@@ -82,10 +84,30 @@ export default function UsuariosClient() {
     await supabase.from('profiles').update({ department_id }).eq('id', id)
   }
 
+  const nomeSetor = (departmentId: number | null) =>
+    departments.find(d => d.id === departmentId)?.name || ''
+
+  // Pesquisa por nome, e-mail, setor ou permissão do usuário.
   const filtered = profiles.filter(p => {
-    const term = searchTerm.toLowerCase()
-    return (p.full_name || '').toLowerCase().includes(term) || (p.email || '').toLowerCase().includes(term)
+    const term = searchTerm.trim().toLowerCase()
+    const campos = [
+      p.full_name || '',
+      p.email || '',
+      nomeSetor(p.department_id),
+      ROLE_LABELS[p.role] || p.role || '',
+    ]
+    const matchBusca = term === '' || campos.some(campo => campo.toLowerCase().includes(term))
+
+    const matchSetor =
+      departmentFilter === 'todos' ||
+      (departmentFilter === 'sem_setor' ? p.department_id === null : String(p.department_id) === departmentFilter)
+
+    const matchPermissao = roleFilter === 'todas' || p.role === roleFilter
+
+    return matchBusca && matchSetor && matchPermissao
   })
+
+  const temFiltroAtivo = searchTerm !== '' || departmentFilter !== 'todos' || roleFilter !== 'todas'
 
   if (loading) {
     return <div className="p-10 text-center text-gray-400 text-sm">Carregando...</div>
@@ -109,15 +131,61 @@ export default function UsuariosClient() {
         </p>
       </div>
 
-      <div className="bg-white p-4 rounded-lg shadow border">
-        <div className="relative max-w-sm">
-          <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
-          <Input
-            placeholder="Buscar por nome ou e-mail..."
-            className="pl-8 bg-gray-50"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+      <div className="bg-white p-4 rounded-lg shadow border space-y-3">
+        <div className="flex flex-col md:flex-row gap-3 md:items-end">
+          <div className="flex-1">
+            <label className="text-xs font-bold text-gray-500 mb-1 block">Pesquisar</label>
+            <div className="relative">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Nome, e-mail, setor ou permissão..."
+                className="pl-8 bg-gray-50"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="w-full md:w-56">
+            <label className="text-xs font-bold text-gray-500 mb-1 block">Setor</label>
+            <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+              <SelectTrigger className="bg-gray-50"><SelectValue placeholder="Todos" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos os setores</SelectItem>
+                <SelectItem value="sem_setor">— Sem setor —</SelectItem>
+                {departments.map(d => (
+                  <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="w-full md:w-48">
+            <label className="text-xs font-bold text-gray-500 mb-1 block">Permissão</label>
+            <Select value={roleFilter} onValueChange={setRoleFilter}>
+              <SelectTrigger className="bg-gray-50"><SelectValue placeholder="Todas" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todas">Todas</SelectItem>
+                {Object.entries(ROLE_LABELS).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs text-gray-500 font-medium">
+            {filtered.length} {filtered.length === 1 ? 'usuário encontrado' : 'usuários encontrados'}
+          </span>
+          {temFiltroAtivo && (
+            <button
+              onClick={() => { setSearchTerm(''); setDepartmentFilter('todos'); setRoleFilter('todas') }}
+              className="text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded transition-colors"
+            >
+              Limpar Filtros
+            </button>
+          )}
         </div>
       </div>
 

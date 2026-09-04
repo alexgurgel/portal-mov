@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { Bug, Lightbulb, Clock, CheckCircle, XCircle, ChevronUp, Send, MessageSquare, CalendarClock } from "lucide-react"
+import { Bug, Lightbulb, Clock, CheckCircle, XCircle, ChevronUp, Send, MessageSquare, CalendarClock, Search } from "lucide-react"
 import { getDisplayStatus } from "@/lib/ticketPhases"
 
 const VIVIANE_EMAIL = "viviane.lopes@grupomov.com.br"
@@ -65,6 +65,10 @@ export default function SuporteClient() {
   const [type, setType] = useState<"bug" | "melhoria">("bug")
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
+
+  // Pesquisa e filtro da lista de relatos
+  const [busca, setBusca] = useState("")
+  const [tipoFiltro, setTipoFiltro] = useState<"todos" | "bug" | "melhoria">("todos")
 
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [chatInput, setChatInput] = useState("")
@@ -240,10 +244,30 @@ export default function SuporteClient() {
     return !!ticket && TICKET_CONCLUIDO.includes(ticket.status)
   }
 
+  // Pesquisa nos relatos: título, descrição, solicitante e nº do chamado gerado.
+  function matchesBusca(report: BugReport): boolean {
+    const termo = busca.trim().replace(/^#/, "").toLowerCase()
+    if (!termo) return true
+    const campos = [
+      report.title,
+      report.description,
+      report.requester_name,
+      String(report.id),
+      report.ticket_id ? String(report.ticket_id) : "",
+    ]
+    return campos.some(campo => (campo || "").toLowerCase().includes(termo))
+  }
+
+  function passaFiltros(report: BugReport): boolean {
+    if (tipoFiltro !== "todos" && report.type !== tipoFiltro) return false
+    return matchesBusca(report)
+  }
+
   const pendentes = reports.filter(r => r.status === 'pendente')
-  const reportsAbertos = reports.filter(r => !isConcluido(r))
-  const reportsConcluidos = reports.filter(r => isConcluido(r))
+  const reportsAbertos = reports.filter(r => !isConcluido(r) && passaFiltros(r))
+  const reportsConcluidos = reports.filter(r => isConcluido(r) && passaFiltros(r))
   const listaAtual = activeTab === 'abertos' ? reportsAbertos : reportsConcluidos
+  const temFiltroAtivo = busca.trim() !== "" || tipoFiltro !== "todos"
 
   return (
     <div className="w-full space-y-6">
@@ -369,11 +393,49 @@ export default function SuporteClient() {
           </button>
         </div>
 
+        {/* Pesquisa dos relatos */}
+        <div className="px-5 py-3 border-b bg-white flex flex-col md:flex-row gap-3 md:items-center">
+          <div className="relative flex-1">
+            <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
+            <Input
+              placeholder="Pesquisar por título, descrição, solicitante ou nº do chamado..."
+              className="pl-8 bg-gray-50"
+              value={busca}
+              onChange={e => setBusca(e.target.value)}
+            />
+          </div>
+          <div className="flex items-center gap-1">
+            {([
+              { value: 'todos', label: 'Todos' },
+              { value: 'bug', label: '🐛 Bugs' },
+              { value: 'melhoria', label: '💡 Melhorias' },
+            ] as const).map(opcao => (
+              <button
+                key={opcao.value}
+                onClick={() => setTipoFiltro(opcao.value)}
+                className={`px-3 py-2 rounded border text-xs font-bold transition-colors ${tipoFiltro === opcao.value ? 'bg-gray-900 border-gray-900 text-white' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'}`}
+              >
+                {opcao.label}
+              </button>
+            ))}
+            {temFiltroAtivo && (
+              <button
+                onClick={() => { setBusca(""); setTipoFiltro("todos") }}
+                className="px-3 py-2 rounded text-xs font-bold text-red-500 hover:bg-red-50 transition-colors"
+              >
+                Limpar
+              </button>
+            )}
+          </div>
+        </div>
+
         {loading ? (
           <div className="p-10 text-center text-gray-400 text-sm">Carregando...</div>
         ) : listaAtual.length === 0 ? (
           <div className="p-10 text-center text-gray-400 text-sm">
-            {activeTab === 'abertos' ? 'Nenhum relato em aberto.' : 'Nenhum relato concluído ainda.'}
+            {temFiltroAtivo
+              ? 'Nenhum relato encontrado com esses filtros.'
+              : activeTab === 'abertos' ? 'Nenhum relato em aberto.' : 'Nenhum relato concluído ainda.'}
           </div>
         ) : (
           <table className="w-full text-sm text-left">
