@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Trash2, Plus, UploadCloud, X } from "lucide-react"
+import { TIPOS_DOCUMENTO } from "@/lib/ticketSearch"
 
 const NAMED_UPLOAD_SLOTS_ESTAGIO1 = [
   { key: 'proposta_locacao', label: 'Proposta de Locação' },
@@ -779,7 +780,7 @@ export function NewTicket() {
             <div className="grid gap-3 border p-4 rounded-md bg-green-50">
                 <Label>Tipo de Emissão</Label>
                 <div className="grid gap-2">
-                     {["Remessa Conserto", "Remessa Locação", "Fatur. Serviço", "Fatur. Peças", "Mau Uso"].map((tipo) => (
+                     {TIPOS_DOCUMENTO.map((tipo) => (
                         <div key={tipo} className="flex items-center space-x-2 bg-white p-2 rounded border hover:bg-gray-50 cursor-pointer">
                             <input type="radio" name="tipo_doc" id={tipo} value={tipo} onChange={(e) => updateForm('tipo_emissao', e.target.value)} className="h-4 w-4 accent-black cursor-pointer" />
                             <label htmlFor={tipo} className="text-sm font-medium leading-none cursor-pointer w-full">{tipo}</label>
@@ -851,7 +852,7 @@ export function NewTicket() {
               {category === "Solicitação de Pagamento" && <div className="bg-emerald-100 p-2 text-[11px] text-emerald-800 rounded mb-2 border border-emerald-200 font-bold">⚠️ Obrigatório anexar o Boleto ou Nota Fiscal.</div>}
               {category === "Entrada de NF" && <div className="bg-cyan-100 p-2 text-[11px] text-cyan-800 rounded mb-2 border border-cyan-200 font-bold">⚠️ Obrigatório anexar a Nota Fiscal de Entrada.</div>}
               {category === "Solicitação de Reembolso" && <div className="bg-indigo-100 p-2 text-[11px] text-indigo-800 rounded mb-2 border border-indigo-200 font-bold">⚠️ Obrigatório anexar o Comprovante/Recibo.</div>}
-              {category === "Emissão de Documento" && <div className="bg-green-100 p-2 text-[11px] text-green-800 rounded mb-2 border border-green-200 font-bold">⚠️ Obrigatório anexar a OV.</div>}
+              {category === "Emissão de Documento" && <div className="bg-green-100 p-2 text-[11px] text-green-800 rounded mb-2 border border-green-200 font-bold">⚠️ Obrigatório anexar a OV ou NF de origem.</div>}
               {category === "Divergência" && <div className="bg-orange-100 p-2 text-[11px] text-orange-800 rounded mb-2 border border-orange-200 font-bold">⚠️ Se possível, anexe foto ou evidência da divergência.</div>}
 
               <Label className="mb-2 block font-semibold flex items-center gap-2"><UploadCloud size={16}/> Anexar Arquivos <span className="text-xs font-normal text-gray-500">(Segure CTRL para selecionar vários)</span></Label>

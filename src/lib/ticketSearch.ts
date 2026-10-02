@@ -33,6 +33,8 @@ export const TIPOS_DOCUMENTO = [
   "Fatur. Serviço",
   "Fatur. Peças",
   "Mau Uso",
+  "Devolução Venda",
+  "Retorno Conserto Cliente",
 ]
 
 export const PRIORIDADES = [
