@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { getDisplayStatus } from "@/lib/ticketPhases"
+import DataAbertura from "@/components/ticket/DataAbertura"
 import { buildTicketOrFilter, TICKET_CATEGORIES, TIPOS_DOCUMENTO, PRIORIDADES } from "@/lib/ticketSearch"
 
 function DashboardContent() {
@@ -325,7 +326,7 @@ function DashboardContent() {
                                     </span>
                                 </td>
                                 <td className="px-4 py-4 text-gray-500 whitespace-nowrap">
-                                    {new Date(ticket.created_at).toLocaleDateString('pt-BR')}
+                                    <DataAbertura createdAt={ticket.created_at} />
                                 </td>
                                 <td className="px-4 py-4">
                                     <span className={`text-xs font-bold px-2 py-1 rounded-full uppercase whitespace-nowrap ${getDisplayStatus(ticket).colorClass}`}>

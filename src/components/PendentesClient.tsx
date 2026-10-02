@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { ListChecks, Inbox, Search, X } from "lucide-react"
+import DataAbertura from "@/components/ticket/DataAbertura"
 
 export default function PendentesClient() {
   const [loading, setLoading] = useState(true)
@@ -228,7 +229,7 @@ export default function PendentesClient() {
                       </span>
                     </td>
                     <td className="px-4 py-4 text-gray-500 whitespace-nowrap">
-                      {new Date(ticket.created_at).toLocaleDateString('pt-BR')}
+                      <DataAbertura createdAt={ticket.created_at} />
                     </td>
                     <td className="px-4 py-4">
                       <span className={`text-xs font-bold px-2 py-1 rounded-full uppercase whitespace-nowrap ${getDisplayStatus(ticket).colorClass}`}>

@@ -27,6 +27,7 @@ import {
     Undo2, AlertTriangle, UploadCloud, Paperclip, XCircle, User, FastForward, RotateCcw
 } from "lucide-react"
 import { getDisplayStatus, getNovaLocacaoStage, NOVA_LOCACAO_STAGES } from "@/lib/ticketPhases"
+import { formatHoraAbertura } from "@/lib/utils"
 import NovaLocacaoTracker from "@/components/ticket/NovaLocacaoTracker"
 import NovaLocacaoStageForm from "@/components/ticket/NovaLocacaoStageForm"
 import HistoricoEstagiosTimeline from "@/components/ticket/HistoricoEstagiosTimeline"
@@ -548,6 +549,11 @@ export default function TicketDetails() {
                 </span>
             </div>
             <p className="text-gray-500 mt-1 text-lg">{ticket.title}</p>
+            {ticket.created_at && (
+                <p className="text-sm text-gray-500 mt-1 flex items-center gap-1">
+                    <Clock size={14}/> Aberto em {new Date(ticket.created_at).toLocaleDateString('pt-BR')} às {formatHoraAbertura(ticket.created_at)}
+                </p>
+            )}
         </div>
       </div>
 
