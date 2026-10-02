@@ -69,6 +69,8 @@ export default function TicketDetails() {
   const [docNFIdx, setDocNFIdx] = useState("")
   const [obsRegistroNF, setObsRegistroNF] = useState("")
 
+  const [novaNotaAcompanhamento, setNovaNotaAcompanhamento] = useState("")
+
   useEffect(() => {
     async function fetchData() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -234,7 +236,7 @@ export default function TicketDetails() {
   const confirmarBaixaItem = async () => {
     if (selectedItemIndex === null || !ticket) return
     if (ticket.category === 'Cotação' && !resolutionData.valor) return alert("Informe o preço!")
-    if (ticket.category === 'Compras' && (!resolutionData.oc || !resolutionData.previsao)) return alert("Informe OC e Previsão!")
+    if (ticket.category === 'Compra' && (!resolutionData.oc || !resolutionData.previsao)) return alert("Informe OC e Previsão!")
 
     try {
         let dadosArquivo = null
@@ -377,6 +379,40 @@ export default function TicketDetails() {
     }
   }
 
+  // --- COMPRA / COTAÇÃO: a compradora sinaliza que já está cotando (ticket #2098) ---
+  async function iniciarCotacao() {
+    const novoCustomData = {
+        ...ticket.custom_data,
+        inicio_cotacao: { responsavel: currentUserName, data: new Date().toISOString() }
+    }
+    const { error } = await supabase.from('tickets').update({ status: 'em_andamento', custom_data: novoCustomData }).eq('id', ticket.id)
+    if (!error) {
+        setTicket({ ...ticket, status: 'em_andamento', custom_data: novoCustomData })
+    } else {
+        alert("Erro ao iniciar cotação: " + error.message)
+    }
+  }
+
+  // Notas de acompanhamento (onde está cotando, fornecedores...), visíveis a todos.
+  async function adicionarNotaAcompanhamento() {
+    const texto = novaNotaAcompanhamento.trim()
+    if (!texto) return
+    const novoCustomData = {
+        ...ticket.custom_data,
+        acompanhamento: [
+            ...(ticket.custom_data?.acompanhamento || []),
+            { texto, autor: currentUserName, data: new Date().toISOString() }
+        ]
+    }
+    const { error } = await supabase.from('tickets').update({ custom_data: novoCustomData }).eq('id', ticket.id)
+    if (!error) {
+        setTicket({ ...ticket, custom_data: novoCustomData })
+        setNovaNotaAcompanhamento("")
+    } else {
+        alert("Erro ao salvar observação: " + error.message)
+    }
+  }
+
   // --- LÓGICA DE CONCLUIR DEFINITIVO (FASE 2 E GERAL) ---
   // O anexo comprobatório é opcional: fica a critério do atendente (ticket #1904).
   async function confirmarResolucaoGlobal() {
@@ -487,6 +523,11 @@ export default function TicketDetails() {
   const isNovaLocacao = ticket.category === "Nova Locação"
   const faseAtual = ticket.custom_data?.fase_atual || 1
 
+  const isCompraCotacao = ticket.category === "Compra" || ticket.category === "Cotação"
+  const inicioCotacao = ticket.custom_data?.inicio_cotacao
+  const acompanhamento: any[] = ticket.custom_data?.acompanhamento || []
+  const ticketAtivo = ticket.status !== 'resolvido' && ticket.status !== 'devolvida'
+
   // Chamado de emissão criado automaticamente a partir de uma Nova Locação
   const isEmissaoDeLocacao = ticket.custom_data?.origem === 'nova_locacao' && !!ticket.custom_data?.locacao_ticket_id
 
@@ -580,6 +621,35 @@ export default function TicketDetails() {
                       )}
                       <p className="text-sm mt-2 text-indigo-900">Conclua o processamento do reembolso pelo botão abaixo.</p>
                   </div>
+              </div>
+          </div>
+      )}
+
+      {/* BANNER COMPRA / COTAÇÃO: aguardando início ou em cotação */}
+      {isCompraCotacao && ticketAtivo && (ticket.status === 'aberto' || inicioCotacao) && (
+          <div className={`p-4 rounded shadow-sm border-l-4 ${ticket.status === 'aberto' ? 'bg-amber-50 border-amber-500' : 'bg-yellow-50 border-yellow-500'}`}>
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                      <Clock className={`mt-1 shrink-0 ${ticket.status === 'aberto' ? 'text-amber-600' : 'text-yellow-600'}`} />
+                      {ticket.status === 'aberto' ? (
+                          <div>
+                              <h3 className="font-bold text-amber-800">Aguardando início da cotação</h3>
+                              <p className="text-sm mt-1 text-amber-900">Ao começar a cotar, marque o chamado como em andamento para o solicitante acompanhar.</p>
+                          </div>
+                      ) : (
+                          <div>
+                              <h3 className="font-bold text-yellow-800">Cotação em andamento</h3>
+                              <p className="text-xs text-yellow-700 mt-1 font-semibold">
+                                  Iniciada por {inicioCotacao.responsavel} em {new Date(inicioCotacao.data).toLocaleString('pt-BR')}
+                              </p>
+                          </div>
+                      )}
+                  </div>
+                  {ticket.status === 'aberto' && podeAgirNaFase('Compras') && (
+                      <Button onClick={iniciarCotacao} className="bg-amber-600 hover:bg-amber-700 text-white gap-2 font-bold shrink-0">
+                          <FastForward size={16} /> Iniciar Cotação
+                      </Button>
+                  )}
               </div>
           </div>
       )}
@@ -873,6 +943,43 @@ export default function TicketDetails() {
                 </CardContent>
             </Card>
 
+            {/* ACOMPANHAMENTO DA COTAÇÃO (COMPRA / COTAÇÃO) */}
+            {isCompraCotacao && (acompanhamento.length > 0 || (ticketAtivo && podeAgirNaFase('Compras'))) && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Acompanhamento da Cotação</CardTitle>
+                        <CardDescription>Onde está sendo cotado, fornecedores consultados, retornos pendentes...</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                        {acompanhamento.length === 0 && (
+                            <p className="text-sm text-gray-400">Nenhuma observação registrada ainda.</p>
+                        )}
+                        {acompanhamento.map((nota: any, idx: number) => (
+                            <div key={idx} className="bg-gray-50 p-3 rounded border">
+                                <p className="text-sm whitespace-pre-wrap break-words">{nota.texto}</p>
+                                <p className="text-[11px] text-gray-500 mt-1 flex items-center gap-1 font-semibold">
+                                    <User size={12}/> {nota.autor} — {new Date(nota.data).toLocaleString('pt-BR')}
+                                </p>
+                            </div>
+                        ))}
+                        {ticketAtivo && podeAgirNaFase('Compras') && (
+                            <div className="space-y-2 pt-2">
+                                <Textarea
+                                    value={novaNotaAcompanhamento}
+                                    onChange={e => setNovaNotaAcompanhamento(e.target.value)}
+                                    placeholder="Ex: Cotando com Fornecedor X e Y, aguardando retorno do Z..."
+                                />
+                                <div className="flex justify-end">
+                                    <Button onClick={adicionarNotaAcompanhamento} disabled={!novaNotaAcompanhamento.trim()} className="bg-black text-white hover:bg-gray-800">
+                                        Adicionar Observação
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+            )}
+
             <div className="flex gap-4 justify-end mt-6 border-t pt-6">
                 {ticket.status !== 'resolvido' && ticket.status !== 'devolvida' && (
                     <>
@@ -919,7 +1026,7 @@ export default function TicketDetails() {
             <div className="py-4 space-y-4">
                 {ticket?.category === 'Cotação' ? (
                     <div><Label>Preço Fechado</Label><Input value={resolutionData.valor} onChange={e => setResolutionData({...resolutionData, valor: e.target.value})} /></div>
-                ) : ticket?.category === 'Compras' ? (
+                ) : ticket?.category === 'Compra' ? (
                     <div className="grid gap-4">
                         <div><Label>O.C.</Label><Input value={resolutionData.oc} onChange={e => setResolutionData({...resolutionData, oc: e.target.value})} /></div>
                         <div><Label>Previsão</Label><Input type="date" value={resolutionData.previsao} onChange={e => setResolutionData({...resolutionData, previsao: e.target.value})} /></div>
