@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
-import { getDisplayStatus, getResponsibleSector } from "@/lib/ticketPhases"
+import { getDisplayStatus, getResponsibleSectors } from "@/lib/ticketPhases"
 import { matchesTicketSearch, PRIORIDADES } from "@/lib/ticketSearch"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -64,7 +64,7 @@ export default function PendentesClient() {
         .order('created_at', { ascending: false })
 
       const pendentes = (ticketsData || []).filter(
-        (t: any) => getResponsibleSector(t) === department.name
+        (t: any) => getResponsibleSectors(t).includes(department.name)
       )
 
       setTickets(pendentes)

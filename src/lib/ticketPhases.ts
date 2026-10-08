@@ -1,6 +1,6 @@
 // Mapeia categorias "de fase única" para o setor responsável.
 // Categorias com fluxo em fases (Devolução Locação, Solicitação de Reembolso,
-// Nova Locação) são tratadas separadamente em getDisplayStatus / getResponsibleSector.
+// Nova Locação) são tratadas separadamente em getDisplayStatus / getResponsibleSectors.
 export const SECTOR_BY_CATEGORY: Record<string, string> = {
   "Cadastro Cliente": "Contratos",
   "Solicitação de Pagamento": "Faturamento",
@@ -13,6 +13,9 @@ export const SECTOR_BY_CATEGORY: Record<string, string> = {
   "Cadastro Mercadoria": "Compras",
   "Baixa Revenda": "Compras",
 }
+
+// Reembolso: Financeiro e Faturamento podem agir nas duas fases (ticket #2153).
+export const REEMBOLSO_SETORES = ['Financeiro', 'Faturamento']
 
 export type DisplayStatus = {
   label: string
@@ -94,23 +97,24 @@ export function getDisplayStatus(ticket: any): DisplayStatus {
   return { label: 'Aberto', colorClass: 'bg-gray-100 text-gray-700' }
 }
 
-// Setor responsável por dar o próximo passo no ticket. `null` quando o
+// Setores responsáveis por dar o próximo passo no ticket. Vazio quando o
 // ticket já está finalizado/devolvido ou não entra em "Pendentes para mim".
-export function getResponsibleSector(ticket: any): string | null {
-  if (ticket.status === 'resolvido' || ticket.status === 'devolvida') return null
+export function getResponsibleSectors(ticket: any): string[] {
+  if (ticket.status === 'resolvido' || ticket.status === 'devolvida') return []
 
   if (ticket.category === 'Nova Locação') {
-    return getNovaLocacaoStage(ticket).setor
+    return [getNovaLocacaoStage(ticket).setor]
   }
 
   if (ticket.category === 'Devolução Locação') {
     const faseAtual = ticket.custom_data?.fase_atual || 1
-    return faseAtual === 2 ? 'Faturamento' : 'Contratos'
+    return [faseAtual === 2 ? 'Faturamento' : 'Contratos']
   }
 
   if (ticket.category === 'Solicitação de Reembolso') {
-    return (ticket.status === 'aberto' || ticket.status === 'em_andamento') ? 'Financeiro' : null
+    return (ticket.status === 'aberto' || ticket.status === 'em_andamento') ? REEMBOLSO_SETORES : []
   }
 
-  return SECTOR_BY_CATEGORY[ticket.category] ?? null
+  const setor = SECTOR_BY_CATEGORY[ticket.category]
+  return setor ? [setor] : []
 }

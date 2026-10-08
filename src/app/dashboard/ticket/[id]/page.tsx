@@ -26,7 +26,7 @@ import {
     CheckCircle2, AlertCircle, Clock, DownloadCloud,
     Undo2, AlertTriangle, UploadCloud, Paperclip, XCircle, User, FastForward, RotateCcw
 } from "lucide-react"
-import { getDisplayStatus, getNovaLocacaoStage, NOVA_LOCACAO_STAGES } from "@/lib/ticketPhases"
+import { getDisplayStatus, getNovaLocacaoStage, NOVA_LOCACAO_STAGES, REEMBOLSO_SETORES } from "@/lib/ticketPhases"
 import { formatHoraAbertura } from "@/lib/utils"
 import NovaLocacaoTracker from "@/components/ticket/NovaLocacaoTracker"
 import NovaLocacaoStageForm from "@/components/ticket/NovaLocacaoStageForm"
@@ -129,7 +129,8 @@ export default function TicketDetails() {
       return { url: data.publicUrl, nome: nomeLimpo }
   }
 
-  const podeAgirNaFase = (setorDaFase: string) => userRole === 'admin' || userDepartmentName === setorDaFase
+  const podeAgirNaFase = (setorDaFase: string | string[]) =>
+      userRole === 'admin' || (!!userDepartmentName && ([] as string[]).concat(setorDaFase).includes(userDepartmentName))
 
   // Ao enviar a OV para emissão, abre sozinho o chamado da NF de remessa para
   // o Faturamento e devolve o id para amarrar os dois chamados (ticket #1914).
@@ -595,7 +596,7 @@ export default function TicketDetails() {
                           </p>
                       </div>
                   </div>
-                  {podeAgirNaFase('Financeiro') && (
+                  {podeAgirNaFase(REEMBOLSO_SETORES) && (
                       <Button
                           onClick={() => { setDocNFIdx(""); setObsRegistroNF(""); setRegistroNFModalOpen(true) }}
                           className="bg-amber-600 hover:bg-amber-700 text-white gap-2 font-bold shrink-0"
@@ -1005,7 +1006,7 @@ export default function TicketDetails() {
                                     </Button>
                                 )
                             ) : isReembolso ? (
-                                ticket.status === 'em_andamento' && podeAgirNaFase('Financeiro') ? (
+                                ticket.status === 'em_andamento' && podeAgirNaFase(REEMBOLSO_SETORES) ? (
                                     <Button onClick={handleOpenGlobalResolve} className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2 font-bold">
                                         <CheckCircle2 size={16} /> Concluir Reembolso
                                     </Button>
