@@ -20,8 +20,7 @@ import {
   UserCog,
   ListChecks,
   FileCheck2,
-  PackageMinus
-} from "lucide-react"
+  PackageMinus, PackageSearch } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { useState, useEffect } from "react"
 
@@ -94,6 +93,7 @@ export function Sidebar() {
     { name: "Divergência / Devolução", icon: AlertTriangle, href: "/dashboard?sector=Divergência" },
     { name: "Cadastro Mercadoria", icon: Package, href: "/dashboard?sector=Cadastro Mercadoria" },
     { name: "Baixa Revenda", icon: PackageMinus, href: "/dashboard?sector=Baixa Revenda" },
+    { name: "Separação Peças Revenda", icon: PackageSearch, href: "/dashboard?sector=Separação Peças Revenda" },
     { name: "Cadastro Cliente", icon: Users, href: "/dashboard?sector=Cadastro Cliente" },
     { name: "Cadastro Fornecedor", icon: Users, href: "/dashboard?sector=Cadastro Fornecedor" },
     { name: "Emissão de Documento", icon: FileSignature, href: "/dashboard?sector=Emissão de Documento" },

@@ -12,6 +12,7 @@ export const SECTOR_BY_CATEGORY: Record<string, string> = {
   "Cadastro Fornecedor": "Compras",
   "Cadastro Mercadoria": "Compras",
   "Baixa Revenda": "Compras",
+  "Separação Peças Revenda": "Almoxarifado",
 }
 
 // Reembolso: Financeiro e Faturamento podem agir nas duas fases (ticket #2153).

@@ -145,9 +145,18 @@ export function NewTicket() {
         }
     }
 
+    // VALIDAÇÃO EXCLUSIVA PARA SEPARAÇÃO PEÇAS REVENDA (ticket #2406)
+    if (category === "Separação Peças Revenda") {
+        const temPeca = items.some(i => i.codigo.trim() || i.descricao.trim())
+        if (!formData.numero_ov?.trim() || !formData.cliente?.trim() || !temPeca) {
+            return alert("Por favor, preencha o Nº da OV, o Cliente e ao menos uma peça (código ou descrição).")
+        }
+    }
+
     const categoriasObrigatorias = [
       'Cadastro Fornecedor', 'Cadastro Cliente', 'Solicitação de Pagamento',
-      'Solicitação de Reembolso', 'Divergência', 'Devolução Locação', 'Entrada de NF'
+      'Solicitação de Reembolso', 'Divergência', 'Devolução Locação', 'Entrada de NF',
+      'Separação Peças Revenda'
     ]
     if (categoriasObrigatorias.includes(category) && arquivosParaUpload.length === 0) {
         return alert(`É obrigatório anexar pelo menos um documento para ${category}.`)
@@ -293,6 +302,10 @@ export function NewTicket() {
         finalTitle = `Divergência: ${formData.motivo_divergencia || 'Geral'}`
         description = `Fornecedor: ${formData.cnpj_fornecedor} | NF: ${formData.numero_nf} | Pedido: ${formData.pedido_compra} | Detalhes: ${formData.description || '-'}`
       }
+      else if (category === "Separação Peças Revenda") {
+        finalTitle = `Separação Peças: OV ${formData.numero_ov} - ${formData.cliente}`
+        description = formData.description || '-'
+      }
       else if (category === "Compra" || category === "Cotação") {
         const primeiro = items[0].descricao || "Itens"
         finalTitle = `${category}: ${primeiro} ${items.length > 1 ? `(+${items.length - 1})` : ''}`
@@ -321,7 +334,9 @@ export function NewTicket() {
             : category === "Solicitação de Reembolso" ? 1 : undefined,
           documentos_estagio1: category === "Nova Locação" ? documentosEstagio1 : undefined,
           historico_estagios: category === "Nova Locação" ? [] : undefined,
-          itens_tabela: category === "Compra" || category === "Cotação" ? items : null,
+          itens_tabela: category === "Compra" || category === "Cotação" ? items
+            : category === "Separação Peças Revenda" ? items.filter(i => i.codigo.trim() || i.descricao.trim())
+            : null,
           itens_baixa: category === "Baixa Revenda" ? baixaItems.filter(i => i.codigo.trim() !== "") : null,
           anexos: listaAnexosSalvos,
           nome_arquivo_anexo: listaAnexosSalvos[0]?.nome || "",
@@ -347,24 +362,25 @@ export function NewTicket() {
     }
   }
 
-  const renderItemsTable = () => (
+  // Separação Peças Revenda usa só Código, Descrição e Qtd (sem PAT/Aplicação).
+  const renderItemsTable = (comPatAplicacao = true) => (
     <div className="border rounded-md overflow-hidden bg-white shadow-sm mt-2">
        <div className="grid grid-cols-12 gap-2 bg-gray-100 p-2 text-xs font-bold text-gray-700 border-b">
             <div className="col-span-2">Código</div>
-            <div className="col-span-4">Descrição *</div>
-            <div className="col-span-1">Qtd</div>
-            <div className="col-span-2">PAT</div>
-            <div className="col-span-2">Aplicação</div>
+            <div className={comPatAplicacao ? "col-span-4" : "col-span-7"}>Descrição *</div>
+            <div className={comPatAplicacao ? "col-span-1" : "col-span-2"}>Qtd</div>
+            {comPatAplicacao && <div className="col-span-2">PAT</div>}
+            {comPatAplicacao && <div className="col-span-2">Aplicação</div>}
             <div className="col-span-1"></div>
         </div>
         <div className="max-h-60 overflow-y-auto">
             {items.map((item, index) => (
                 <div key={index} className="grid grid-cols-12 gap-2 p-2 border-b items-center hover:bg-gray-50">
                     <div className="col-span-2"><Input className="h-8 text-xs" value={item.codigo} onChange={e => updateItem(index, 'codigo', e.target.value)} /></div>
-                    <div className="col-span-4"><Input className="h-8 text-xs" value={item.descricao} onChange={e => updateItem(index, 'descricao', e.target.value)} /></div>
-                    <div className="col-span-1"><Input className="h-8 text-xs" type="number" value={item.qtd} onChange={e => updateItem(index, 'qtd', e.target.value)} /></div>
-                    <div className="col-span-2"><Input className="h-8 text-xs" value={item.pat} onChange={e => updateItem(index, 'pat', e.target.value)} /></div>
-                    <div className="col-span-2"><Input className="h-8 text-xs" value={item.aplicacao} onChange={e => updateItem(index, 'aplicacao', e.target.value)} /></div>
+                    <div className={comPatAplicacao ? "col-span-4" : "col-span-7"}><Input className="h-8 text-xs" value={item.descricao} onChange={e => updateItem(index, 'descricao', e.target.value)} /></div>
+                    <div className={comPatAplicacao ? "col-span-1" : "col-span-2"}><Input className="h-8 text-xs" type="number" value={item.qtd} onChange={e => updateItem(index, 'qtd', e.target.value)} /></div>
+                    {comPatAplicacao && <div className="col-span-2"><Input className="h-8 text-xs" value={item.pat} onChange={e => updateItem(index, 'pat', e.target.value)} /></div>}
+                    {comPatAplicacao && <div className="col-span-2"><Input className="h-8 text-xs" value={item.aplicacao} onChange={e => updateItem(index, 'aplicacao', e.target.value)} /></div>}
                     <div className="col-span-1 text-center">
                         {items.length > 1 && <Button variant="ghost" size="sm" onClick={() => removeItem(index)} className="h-8 w-8 text-red-500"><Trash2 size={16}/></Button>}
                     </div>
@@ -563,6 +579,18 @@ export function NewTicket() {
                 <Label className="text-base font-bold">Lista de Itens ({category})</Label>
                 {renderItemsTable()}
                 <div className="mt-2"><Label>Obs. Gerais</Label><Textarea onChange={e => updateForm('description', e.target.value)} /></div>
+            </div>
+        )
+      case "Separação Peças Revenda":
+        return (
+            <div className="grid gap-3 border p-4 rounded-md bg-sky-50">
+                <div className="grid grid-cols-2 gap-3">
+                    <div><Label className="font-bold">Nº da OV *</Label><Input className="bg-white" value={formData.numero_ov || ''} onChange={e => updateForm('numero_ov', e.target.value)} /></div>
+                    <div><Label className="font-bold">Cliente *</Label><Input className="bg-white" value={formData.cliente || ''} onChange={e => updateForm('cliente', e.target.value)} /></div>
+                </div>
+                <Label className="text-base font-bold">Peças para separar</Label>
+                {renderItemsTable(false)}
+                <div className="mt-2"><Label>Observações</Label><Textarea className="bg-white" onChange={e => updateForm('description', e.target.value)} /></div>
             </div>
         )
       case "Solicitação de Pagamento":
@@ -843,6 +871,7 @@ export function NewTicket() {
                         <SelectItem value="Cadastro Cliente">Cadastro Cliente</SelectItem>
                         <SelectItem value="Cadastro Fornecedor">Cadastro Fornecedor</SelectItem>
                         <SelectItem value="Emissão de Documento">Emissão de Documento</SelectItem>
+                        <SelectItem value="Separação Peças Revenda">Separação Peças Revenda</SelectItem>
                     </SelectContent>
                 </Select>
             </div>
@@ -868,6 +897,7 @@ export function NewTicket() {
               {category === "Entrada de NF" && <div className="bg-cyan-100 p-2 text-[11px] text-cyan-800 rounded mb-2 border border-cyan-200 font-bold">⚠️ Obrigatório anexar a Nota Fiscal de Entrada.</div>}
               {category === "Solicitação de Reembolso" && <div className="bg-indigo-100 p-2 text-[11px] text-indigo-800 rounded mb-2 border border-indigo-200 font-bold">⚠️ Obrigatório anexar o Comprovante/Recibo.</div>}
               {category === "Emissão de Documento" && <div className="bg-green-100 p-2 text-[11px] text-green-800 rounded mb-2 border border-green-200 font-bold">⚠️ Obrigatório anexar a OV ou NF de origem.</div>}
+              {category === "Separação Peças Revenda" && <div className="bg-sky-100 p-2 text-[11px] text-sky-800 rounded mb-2 border border-sky-200 font-bold">⚠️ Obrigatório anexar a OV.</div>}
               {category === "Divergência" && <div className="bg-orange-100 p-2 text-[11px] text-orange-800 rounded mb-2 border border-orange-200 font-bold">⚠️ Se possível, anexe foto ou evidência da divergência.</div>}
 
               <Label className="mb-2 block font-semibold flex items-center gap-2"><UploadCloud size={16}/> Anexar Arquivos <span className="text-xs font-normal text-gray-500">(Segure CTRL para selecionar vários)</span></Label>

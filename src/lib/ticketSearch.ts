@@ -23,6 +23,7 @@ export const TICKET_CATEGORIES = [
   "Cadastro Cliente",
   "Cadastro Fornecedor",
   "Emissão de Documento",
+  "Separação Peças Revenda",
   "Suporte Sistema",
 ]
 
