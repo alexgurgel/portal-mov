@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, type ReactNode } from "react"
+import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -41,6 +42,7 @@ type TicketResumo = {
 const TICKET_CONCLUIDO = ['resolvido', 'devolvida']
 
 export default function SuporteClient() {
+  const router = useRouter()
   const [userEmail, setUserEmail] = useState("")
   const [userName, setUserName] = useState("")
   const [userId, setUserId] = useState("")
@@ -93,6 +95,9 @@ export default function SuporteClient() {
         if (ADMIN_EMAILS.includes(user.email || "")) {
           await fetchChat()
         }
+      } else {
+        // Sessão expirada: volta para o login em vez de ficar em "Carregando..."
+        router.push('/')
       }
     }
     init()

@@ -571,7 +571,11 @@ export default function TicketDetails() {
                           Fase Atual: {getDisplayStatus(ticket).label}
                       </h3>
                       <p className={`text-sm mt-1 ${faseAtual === 1 ? 'text-amber-900' : 'text-blue-900'}`}>
-                          {faseAtual === 1 ? 'O setor de Contratos precisa validar as informações antes de liberar para o faturamento.' : 'Contrato validado! O setor de Faturamento deve anexar o documento fiscal para concluir.'}
+                          {faseAtual === 1
+                              ? 'O setor de Contratos precisa validar as informações antes de liberar para o faturamento.'
+                              : ticket.custom_data?.altera_contrato === 'NÃO'
+                                  ? 'Devolução não altera contrato: veio direto para o Faturamento anexar o documento fiscal e concluir.'
+                                  : 'Contrato validado! O setor de Faturamento deve anexar o documento fiscal para concluir.'}
                       </p>
                       {faseAtual === 2 && ticket.custom_data?.responsavel_fase1 && (
                           <p className="text-xs text-blue-700 mt-2 font-semibold">

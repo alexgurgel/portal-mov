@@ -5,7 +5,7 @@ export const SECTOR_BY_CATEGORY: Record<string, string> = {
   "Cadastro Cliente": "Contratos",
   "Solicitação de Pagamento": "Faturamento",
   "Entrada de NF": "Financeiro",
-  "Divergência": "Faturamento",
+  "Divergência": "Compras",
   "Emissão de Documento": "Faturamento",
   "Compra": "Compras",
   "Cotação": "Compras",

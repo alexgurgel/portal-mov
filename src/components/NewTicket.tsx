@@ -140,6 +140,9 @@ export function NewTicket() {
         if (!formData.cliente || !hasValidPat || !formData.data_devolucao || !formData.nf_numero) {
             return alert("Por favor, preencha todos os campos obrigatórios (Cliente, ao menos 1 PAT, Data de Devolução e Nº Nota Fiscal).")
         }
+        if (!formData.altera_contrato) {
+            return alert("Informe se a devolução altera o contrato (Sim ou Não).")
+        }
     }
 
     const categoriasObrigatorias = [
@@ -247,9 +250,7 @@ export function NewTicket() {
         finalTitle = `Devolução Locação: ${formData.cliente} - PAT(s): ${patString}`
         description = `NF Nº: ${formData.nf_numero} | Data Devolução: ${formData.data_devolucao} | Valor Frete: R$ ${formData.valor_frete || '0,00'}`
         
-        if (formData.nao_altera_contrato === 'SIM') {
-            description += `\n[ATENÇÃO: MARCADO COMO "NÃO ALTERA CONTRATO"]`
-        }
+        description += `\nAltera contrato? ${formData.altera_contrato === 'SIM' ? 'Sim' : 'Não'}`
         
         description += `\nObs: ${formData.description || '-'}`
         
@@ -313,7 +314,11 @@ export function NewTicket() {
         requester_name: requesterName,
         custom_data: {
           ...formData,
-          fase_atual: category === "Nova Locação" ? 2 : (category === "Devolução Locação" || category === "Solicitação de Reembolso") ? 1 : undefined,
+          // Devolução que não altera contrato pula a validação de Contratos e vai direto
+          // para o Faturamento lançar a NF (ticket #2435).
+          fase_atual: category === "Nova Locação" ? 2
+            : category === "Devolução Locação" ? (formData.altera_contrato === 'NÃO' ? 2 : 1)
+            : category === "Solicitação de Reembolso" ? 1 : undefined,
           documentos_estagio1: category === "Nova Locação" ? documentosEstagio1 : undefined,
           historico_estagios: category === "Nova Locação" ? [] : undefined,
           itens_tabela: category === "Compra" || category === "Cotação" ? items : null,
@@ -430,17 +435,27 @@ export function NewTicket() {
                     </div>
                 </div>
 
-                {/* CHECKBOX DE NÃO ALTERA CONTRATO */}
-                <div className="flex items-center space-x-3 bg-white p-3 rounded border border-amber-300 mt-1">
-                    <input 
-                        type="checkbox" 
-                        id="nao_altera_contrato" 
-                        className="h-5 w-5 accent-amber-600 cursor-pointer" 
-                        onChange={e => updateForm('nao_altera_contrato', e.target.checked ? 'SIM' : 'NÃO')} 
-                    />
-                    <label htmlFor="nao_altera_contrato" className="text-sm font-extrabold text-amber-900 cursor-pointer select-none">
-                        NÃO ALTERA CONTRATO
-                    </label>
+                {/* ALTERA CONTRATO? — "Não" manda direto para o Faturamento */}
+                <div className="bg-white p-3 rounded border border-amber-300 mt-1">
+                    <Label className="font-bold text-amber-900">Altera contrato? *</Label>
+                    <div className="flex gap-6 mt-2">
+                        {[{ valor: 'SIM', label: 'Sim' }, { valor: 'NÃO', label: 'Não' }].map(op => (
+                            <label key={op.valor} className="flex items-center gap-2 text-sm font-semibold cursor-pointer select-none">
+                                <input
+                                    type="radio"
+                                    name="altera_contrato"
+                                    value={op.valor}
+                                    checked={formData.altera_contrato === op.valor}
+                                    onChange={e => updateForm('altera_contrato', e.target.value)}
+                                    className="h-4 w-4 accent-amber-600 cursor-pointer"
+                                />
+                                {op.label}
+                            </label>
+                        ))}
+                    </div>
+                    <p className="text-[11px] text-amber-800 mt-2">
+                        Sim: passa primeiro pela validação de Contratos. Não: vai direto para o Faturamento lançar a NF.
+                    </p>
                 </div>
 
                 <div><Label className="font-bold">Observações</Label><Textarea className="bg-white" placeholder="Detalhes ou observações sobre a devolução..." onChange={e => updateForm('description', e.target.value)} /></div>
